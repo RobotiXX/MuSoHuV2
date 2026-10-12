@@ -1,4 +1,5 @@
 # MuSoHu: Multi-Modal Social Human Navigation (v2)
+Last updated: 10//12/2026
 
 Multi-Modal Social Human Navigation Dataset - A robotics research platform developed at George Mason University for collecting data on human-robot interactions in social navigation contexts.
 
