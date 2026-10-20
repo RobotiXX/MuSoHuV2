@@ -2,7 +2,10 @@
 MuSoHu Web Application
 Manages ROS2 scripts, displays logs, and monitors system resources
 """
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, Body
+from starlette.concurrency import run_in_threadpool
+from process_manager import ProcessManager
+from clock_sync import ClockSync
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -56,7 +59,7 @@ except Exception as e:
 # Load configuration
 def load_config():
     """Load configuration from config.yml"""
-    config_path = os.path.join(BASE_DIR, 'config.yml')
+    config_path = os.environ.get('MUSOHU_CONFIG', os.path.join(BASE_DIR, 'config.yml'))
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r') as f:
@@ -94,27 +97,17 @@ config = load_config()
 # Initialize file discovery service
 file_discovery = FileDiscoveryService(config)
 
-# Define available ROS2 scripts
-ROS2_SCRIPTS = {
-    'helmet_nodes': {
-        # Updated command to properly source the ROS2 workspace before launching sensors
-        # Uses bash -c to ensure sourcing takes effect in the same shell invocation
-        'command': 'bash -c "cd /home/jetson/ros2_musohu_ws && source install/setup.bash && ros2 launch helmet_bringup helmet_sensors.launch.py"',
-        'description': 'Launch Helmet Sensors',
-        'status': 'stopped',
-        'pid': None
-    },
-    'record_bag': {
-        # Records all ROS2 topics into /home/jetson/helmet_bags
-        # Creates the directory if missing and uses a timestamped bag name
-        'command': 'bash -c "mkdir -p /home/jetson/helmet_bags && cd /home/jetson/ros2_musohu_ws && source install/setup.bash && ros2 bag record -a -o /home/jetson/helmet_bags/helmet_bag_$(date +%Y%m%d_%H%M%S)"',
-        'description': 'Record all ROS2 topics to /home/jetson/helmet_bags',
-        'status': 'stopped',
-        'pid': None
-    }
-}
+# Resolve user log paths independently of the service working directory.
+for collection in (config.get('log_dirs', []), config.get('log_viewer', {}).get('scan_directories', [])):
+    for entry in collection:
+        if 'path' in entry:
+            entry['path'] = os.path.expanduser(os.path.expandvars(entry['path']))
+manager = ProcessManager(BASE_DIR, config)
+clock_sync = ClockSync(manager)
 
-running_processes = {}
+@app.on_event("shutdown")
+async def stop_owned_processes():
+    await run_in_threadpool(manager.close)
 
 # ---------------------------- Page Routes -----------------------------
 
@@ -156,7 +149,7 @@ async def health_check():
     """Health check endpoint for monitoring"""
     return JSONResponse(content={
         'status': 'healthy',
-        'running_scripts': len(running_processes),
+        'running_scripts': sum(item.get('pid') is not None for item in manager.status().values()),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -170,16 +163,38 @@ async def health_check():
 @app.get("/api/scripts")
 async def list_scripts():
     """List all available ROS2 scripts and their status"""
-    # Update status based on actual process state
-    for script_id in list(running_processes):
-        process = running_processes[script_id]
-        if process.poll() is not None:
-            # Process has terminated
-            del running_processes[script_id]
-            ROS2_SCRIPTS[script_id]['status'] = 'stopped'
-            ROS2_SCRIPTS[script_id]['pid'] = None
+    return JSONResponse(content=manager.status())
 
-    return JSONResponse(content=ROS2_SCRIPTS)
+
+@app.get("/api/recording/config")
+async def recording_config():
+    return JSONResponse(content=manager.defaults())
+
+
+@app.get("/api/time")
+async def system_time():
+    return JSONResponse(content=await run_in_threadpool(clock_sync.status))
+
+
+@app.post("/api/time/sync")
+async def sync_phone_time(payload: dict = Body(default={})):
+    try:
+        state = await run_in_threadpool(clock_sync.change, epoch_ms=payload.get('epoch_ms'))
+        return JSONResponse(content=state, status_code=200 if state['last_result']['lidar_ready'] else 503)
+    except ValueError as exc:
+        return JSONResponse(content={'error': str(exc)}, status_code=409)
+    except (RuntimeError, subprocess.SubprocessError) as exc:
+        return JSONResponse(content={'error': str(exc)}, status_code=503)
+
+
+@app.post("/api/time/internet")
+async def enable_internet_time():
+    try:
+        return JSONResponse(content=await run_in_threadpool(clock_sync.change, internet=True))
+    except ValueError as exc:
+        return JSONResponse(content={'error': str(exc)}, status_code=409)
+    except (RuntimeError, subprocess.SubprocessError) as exc:
+        return JSONResponse(content={'error': str(exc)}, status_code=503)
 
 
 # -------------------- API Routes - System Monitoring -----------------------
@@ -714,106 +729,43 @@ async def stream_file(
 # API Routes - Scripts
 # ============================================================================
 @app.post("/api/scripts/{script_id}/start")
-async def start_script(script_id: str):
-    """Start a ROS2 script"""
-    logger.info(f'Attempting to start script: {script_id}')
-    # Backward compatibility: accept old id 'rviz2' and map to new 'record_bag'
+async def start_script(script_id: str, payload: dict = Body(default={})):
     if script_id == 'rviz2':
         script_id = 'record_bag'
-    
-    if script_id not in ROS2_SCRIPTS:
-        logger.error(f'Script not found: {script_id}')
-        return JSONResponse(content={'error': 'Script not found'}, status_code=404)
-
-    if script_id in running_processes:
-        logger.warning(f'Script already running: {script_id}')
-        return JSONResponse(content={'error': 'Script already running'}, status_code=400)
-
     try:
-        command = ROS2_SCRIPTS[script_id]['command']
-        script_name = ROS2_SCRIPTS[script_id]['description']
-
-        # Start the process
-        process = subprocess.Popen(
-            command,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            preexec_fn=os.setsid  # Create new process group
-        )
-
-        # Update tracking
-        running_processes[script_id] = process
-        ROS2_SCRIPTS[script_id]['status'] = 'running'
-        ROS2_SCRIPTS[script_id]['pid'] = str(process.pid)  # Fix type mismatch
-
-        logger.info(f'Successfully started {script_id} with PID: {process.pid}')
-        return JSONResponse(content={
-            'message': f'Started {script_name} (PID: {process.pid})',
-            'pid': process.pid
-        })
-    except Exception as e:
-        logger.error(f'Failed to start {script_id}: {str(e)}')
-        return JSONResponse(content={'error': str(e)}, status_code=500)
+        state = await run_in_threadpool(manager.start, script_id,
+                                       payload.get('label', 'session'), payload.get('topics'))
+        return JSONResponse(content=dict(state, message='Starting; waiting for recorder confirmation.'
+                            if script_id == 'record_bag' else 'Sensor launch started.'), status_code=202)
+    except KeyError:
+        return JSONResponse(content={'error': 'Unknown operation'}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse(content={'error': str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception('Unable to start %s', script_id)
+        return JSONResponse(content={'error': str(exc)}, status_code=500)
 
 
 @app.post("/api/scripts/{script_id}/stop")
 async def stop_script(script_id: str):
-    """Stop a running ROS2 script"""
     if script_id == 'rviz2':
         script_id = 'record_bag'
-    if script_id not in ROS2_SCRIPTS:
-        return JSONResponse(content={'error': 'Invalid script ID'}, status_code=400)
-
-    logger.info(f'Attempting to stop script: {script_id}')
-    
-    script_name = ROS2_SCRIPTS[script_id]['description']
-    
-    # Always ensure status is set to stopped
-    ROS2_SCRIPTS[script_id]['status'] = 'stopped'
-    ROS2_SCRIPTS[script_id]['pid'] = None
-    
-    if script_id not in running_processes:
-        logger.warning(f'{script_id} is already stopped')
-        return JSONResponse(content={'message': f'{script_name} is already stopped'})
-
+    if script_id not in ('record_bag', 'helmet_nodes'):
+        return JSONResponse(content={'error': 'Unknown operation'}, status_code=404)
     try:
-        process = running_processes[script_id]
-        pid = process.pid
-        
-        # Check if process is still alive
-        if process.poll() is not None:
-            # Process already terminated
-            del running_processes[script_id]
-            return JSONResponse(content={'message': f'Stopped {script_name} (PID: {pid})'})
+        state = await run_in_threadpool(manager.stop, script_id)
+        return JSONResponse(content=dict(state, message='Recording finalized and stopped.'
+                            if script_id == 'record_bag' and state.get('finalized') else
+                            'Stop completed.'), status_code=500 if state.get('status') == 'failed' else 200)
+    except Exception as exc:
+        logger.exception('Unable to stop %s', script_id)
+        return JSONResponse(content={'error': str(exc)}, status_code=500)
 
-        # Terminate the process gracefully
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            # Force kill if termination times out
-            process.kill()
-            process.wait()
-        except ProcessLookupError:
-            # Process doesn't exist anymore
-            pass
-
-        del running_processes[script_id]
-        
-        logger.info(f"Successfully stopped {script_id} (PID: {pid})")
-        return JSONResponse(content={'message': f'Stopped {script_name} (PID: {pid})'})
-    except Exception as e:
-        logger.error(f'Error stopping {script_id}: {str(e)}')
-        # Clean up even on error
-        if script_id in running_processes:
-            del running_processes[script_id]
-        return JSONResponse(content={'message': f'Stopped {script_name}'})
 
 if __name__ == "__main__":
     import uvicorn
     server_config = config.get('server', {})
     host = server_config.get('host', '0.0.0.0')
     port = server_config.get('port', 8000)
-    uvicorn.run("app:app", host=host, port=port, reload=True)
+    uvicorn.run("app:app", host=host, port=port, reload=False)
 

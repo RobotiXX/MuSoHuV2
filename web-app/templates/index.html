@@ -34,6 +34,27 @@
         <!-- Toast Container -->
         <div id="toast-container"></div>
 
+        <section class="script-card" id="time-sync">
+            <h2>Time synchronization</h2>
+            <p>Phone: <span id="phone-time"></span></p>
+            <p>Jetson: <span id="jetson-time"></span></p>
+            <p id="clock-reference">Checking time reference…</p>
+            <p>Before starting sensors, use your phone's time when offline. Internet is not required.</p>
+            <button id="sync-phone-time">Sync from this phone</button>
+            <button id="enable-internet-time">Use internet time</button>
+            <p id="clock-result" role="status"></p>
+        </section>
+
+        <section class="script-card" id="recording-options">
+            <h2>Recording session</h2>
+            <label for="session-label">Session label</label>
+            <input id="session-label" value="walk" maxlength="80" pattern="[A-Za-z0-9_-]+" style="width:100%;padding:0.5rem;margin:0.4rem 0 1rem">
+            <label for="record-topics">Topics to record (one per line)</label>
+            <select id="record-profile" aria-label="Topic preset" style="margin:0.4rem"></select>
+            <textarea id="record-topics" rows="10" style="width:100%;padding:0.5rem;margin:0.4rem 0"></textarea>
+            <p>Selected topics must have publishers before recording starts.</p>
+            <p>Save location: <span id="bag-directory"></span></p>
+        </section>
         <div id="scripts-container"></div>
 
         <footer class="footer">
@@ -68,102 +89,141 @@
         });
     </script>
     <script>
-        // Toast Notification System
-        function showToast(message, type = 'info') {
-            const toastContainer = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-
-            const icons = {
-                success: '✓',
-                error: '✗',
-                info: 'ℹ'
-            };
-
-            toast.innerHTML = `
-                <div class="toast-icon">${icons[type] || icons.info}</div>
-                <div class="toast-message">${message}</div>
-                <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-            `;
-
-            toastContainer.appendChild(toast);
-
-            // Trigger animation
-            setTimeout(() => toast.classList.add('show'), 10);
-
-            // Auto-remove after 4 seconds
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
+        const pending = new Set();
+        const activeStates = new Set(['starting', 'recording', 'running', 'stopping']);
+        let changingTime = false;
+        async function loadTime() {
+            const response = await fetch('/api/time');
+            if (!response.ok) return;
+            const state = await response.json();
+            document.getElementById('phone-time').textContent = new Date().toLocaleString();
+            document.getElementById('jetson-time').textContent = new Date(state.epoch_ms).toLocaleString();
+            document.getElementById('clock-reference').textContent =
+                `Reference: ${state.source === 'phone' ? 'phone (offline)' : state.source}. PTP source: ${state.ptp_service}.`;
         }
-
+        async function changeTime(internet) {
+            if (changingTime) return;
+            changingTime = true;
+            const result = document.getElementById('clock-result');
+            result.textContent = internet ? 'Enabling internet time…' : 'Applying phone time and verifying LiDAR clock…';
+            try {
+                await loadScripts();
+                const response = await fetch(internet ? '/api/time/internet' : '/api/time/sync', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify(internet ? {} : {epoch_ms:Date.now()})
+                });
+                const state = await response.json();
+                result.textContent = state.error || state.last_result?.message || 'Time request completed.';
+                await loadTime();
+            } catch (error) { result.textContent = error.message; }
+            finally { changingTime = false; await loadScripts(); }
+        }
+        document.getElementById('sync-phone-time').addEventListener('click', () => changeTime(false));
+        document.getElementById('enable-internet-time').addEventListener('click', () => changeTime(true));
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type} show`;
+            toast.textContent = message;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.remove(), 7000);
+        }
+        async function loadConfig() {
+            const response = await fetch('/api/recording/config');
+            if (!response.ok) throw new Error('Unable to load recording settings');
+            const config = await response.json();
+            document.getElementById('record-topics').value = config.topics.join('\n');
+            document.getElementById('bag-directory').textContent = config.bag_directory;
+            const profiles = document.getElementById('record-profile');
+            for (const name of Object.keys(config.profiles || {})) {
+                const option = document.createElement('option');
+                option.value = name; option.textContent = name; profiles.append(option);
+            }
+            profiles.addEventListener('change', () => {
+                document.getElementById('record-topics').value = config.profiles[profiles.value].join('\n');
+            });
+        }
         async function loadScripts() {
             const response = await fetch('/api/scripts');
+            if (!response.ok) return;
             const scripts = await response.json();
-
             const container = document.getElementById('scripts-container');
-            container.innerHTML = '';
-
+            container.replaceChildren();
             for (const [id, script] of Object.entries(scripts)) {
-                const card = createScriptCard(id, script);
-                container.appendChild(card);
-            }
-        }
-
-
-        function createScriptCard(id, script) {
-            const card = document.createElement('div');
-            card.className = 'script-card';
-
-            const isRunning = script.status === 'running';
-            const statusText = isRunning 
-                ? `🟢 Running${script.pid ? ` (PID: ${script.pid})` : ''}`
-                : '🔴 Stopped';
-            
-            card.innerHTML = `
-                <h3>${script.description}</h3>
-                <p><code>${script.command}<br>&nbsp;</code></p>
-                <div style="margin-top: auto;">
-                    <div class="status ${isRunning ? 'running' : 'stopped'}">
-                        ${statusText}
-                    </div>
-                    <button onclick="toggleScript('${id}', ${isRunning})" 
-                            class="${isRunning ? 'btn-stop' : 'btn-start'}">
-                        ${isRunning ? 'Stop' : 'Start'}
-                    </button>
-                </div>
-            `;
-            
-            return card;
-        }
-
-        async function toggleScript(id, isRunning) {
-            const action = isRunning ? 'stop' : 'start';
-            
-            try {
-                const response = await fetch(`/api/scripts/${id}/${action}`, {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showToast(result.message, 'success');
-                    loadScripts();
-                } else {
-                    showToast('Error: ' + result.error, 'error');
+                const card = document.createElement('section');
+                card.className = 'script-card';
+                card.dataset.script = id;
+                const title = document.createElement('h3');
+                title.textContent = script.description;
+                const state = document.createElement('p');
+                state.className = 'status ' + (activeStates.has(script.status) ? 'running' : 'stopped');
+                state.dataset.state = script.status;
+                const labels = {starting:'Starting — waiting for recorder', recording:'Recording',
+                    running:'Sensor launch running', stopping:'Stopping — saving bag', stopped:'Stopped', failed:'Failed'};
+                state.textContent = labels[script.status] || script.status;
+                card.append(title, state);
+                if (script.error) {
+                    const error = document.createElement('p');
+                    error.className = 'recording-error';
+                    error.textContent = script.error;
+                    card.append(error);
                 }
-            } catch (error) {
-                showToast('Error: ' + error.message, 'error');
+                if (script.bag_path) {
+                    const path = document.createElement('p');
+                    path.style.overflowWrap = 'anywhere';
+                    path.textContent = 'Bag: ' + script.bag_path;
+                    card.append(path);
+                }
+                if (script.finalized) {
+                    const saved = document.createElement('p');
+                    saved.className = 'recording-result';
+                    saved.textContent = `Saved ${script.message_count} messages. Bag finalized.`;
+                    card.append(saved);
+                    if (script.topics_without_messages?.length) {
+                        const missing = document.createElement('p');
+                        missing.textContent = 'No messages received: ' + script.topics_without_messages.join(', ');
+                        card.append(missing);
+                    }
+                }
+                const active = activeStates.has(script.status);
+                const button = document.createElement('button');
+                button.dataset.script = id;
+                button.dataset.action = active ? 'stop' : 'start';
+                button.className = active ? 'btn-stop' : 'btn-start';
+                button.textContent = script.status === 'stopping' ? 'Saving…' : active ? 'Stop' : 'Start';
+                button.disabled = pending.has(id) || script.status === 'stopping' || changingTime;
+                button.addEventListener('click', () => toggleScript(id, active));
+                card.append(button);
+                container.append(card);
             }
+            const active = activeStates.has(scripts.record_bag.status);
+            document.getElementById('session-label').disabled = active;
+            document.getElementById('record-topics').disabled = active;
+            document.getElementById('record-profile').disabled = active;
+            const sensorsActive = Object.values(scripts).some(s => activeStates.has(s.status));
+            document.getElementById('sync-phone-time').disabled = sensorsActive || changingTime;
+            document.getElementById('enable-internet-time').disabled = sensorsActive || changingTime;
         }
-
-        // Load scripts on page load
-        loadScripts();
-
-        // Refresh every 5 seconds
-        setInterval(loadScripts, 5000);
+        async function toggleScript(id, active) {
+            if (pending.has(id)) return;
+            pending.add(id);
+            try {
+                let options = {method:'POST'};
+                if (!active && id === 'record_bag') {
+                    options.headers = {'Content-Type':'application/json'};
+                    options.body = JSON.stringify({label:document.getElementById('session-label').value,
+                        topics:document.getElementById('record-topics').value.split(/\s+/).filter(Boolean)});
+                }
+                await loadScripts();
+                const response = await fetch(`/api/scripts/${id}/${active ? 'stop' : 'start'}`, options);
+                const result = await response.json();
+                showToast(response.ok ? result.message : result.error, response.ok ? 'success' : 'error');
+            } catch (error) { showToast(error.message, 'error'); }
+            finally { pending.delete(id); await loadScripts(); }
+        }
+        loadConfig().then(loadScripts).catch(error => showToast(error.message, 'error'));
+        setInterval(() => loadScripts().catch(() => {}), {{ refresh_interval | int }} * 1000);
+        loadTime().catch(() => {});
+        setInterval(() => loadTime().catch(() => {}), 5000);
     </script>
 </body>
 </html>

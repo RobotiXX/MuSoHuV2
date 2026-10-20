@@ -6,7 +6,7 @@ This directory contains all scripts for setting up, deploying, managing, and tes
 
 ```
 scripts/
-├── install/          # Installation scripts for dependencies
+├── setup/            # Legacy installer artifact (not the workspace setup)
 ├── deploy/           # Deployment and service setup scripts
 ├── test/             # Testing and verification scripts
 ├── utils/            # Utility and management scripts
@@ -20,20 +20,19 @@ scripts/
 ### 1. Install Dependencies
 
 ```bash
-# Install ZED SDK
-sudo bash scripts/install/install_zed_sdk.sh
-
-# Install Python packages
-bash scripts/install/install_python_packages.sh
-
-# Install firewall
-sudo bash scripts/install/install_ufw.sh
+# Run as your normal user in a fresh terminal; sudo is used for dependencies.
+./musohu_ws/scripts/setup.sh
+# Install only, or rebuild without sudo:
+./musohu_ws/scripts/setup.sh --deps-only
+./musohu_ws/scripts/setup.sh --build-only
 ```
 
 ### 2. Deploy Production Service
 
 ```bash
-sudo bash scripts/deploy/setup_production_web_service.sh
+./scripts/deploy/setup_production_web_service.sh --prepare-only
+# After reviewing web-app/deploy/musohu-web.service:
+./scripts/deploy/setup_production_web_service.sh --install
 ```
 
 ### 3. Verify Setup
@@ -66,8 +65,12 @@ For detailed documentation, see:
 
 ## Script Organization
 
-### Installation (`install/`)
-One-time installation of system dependencies and components. See [install/README.md](install/README.md).
+### ROS workspace setup (`../musohu_ws/scripts/`)
+`setup.sh` installs native/ROS/Python dependencies and SDK 5.5 if missing,
+then builds with `--symlink-install`. It replaces the nonexistent older
+`scripts/install/` commands. `zed-sdk.sh` can download/install the SDK alone;
+`validate-sensors.py` observes a running rig and saves acquisition statistics.
+See [workspace operation](../musohu_ws/README.md).
 
 ### Deployment (`deploy/`)
 Production deployment and service setup. See [deploy/README.md](deploy/README.md).

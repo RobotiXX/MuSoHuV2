@@ -236,6 +236,10 @@ body {
     padding: 2rem;
 }
 
+#bag-directory {
+    overflow-wrap: anywhere;
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 1rem;

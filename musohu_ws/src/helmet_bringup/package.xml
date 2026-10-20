@@ -10,13 +10,23 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <!-- Dependencies for sensor nodes -->
-  <exec_depend>witmotion_ros2</exec_depend>
+  <exec_depend>witmotion_ros</exec_depend>
   <exec_depend>rslidar_sdk</exec_depend>
   <exec_depend>zed_wrapper</exec_depend>
   <exec_depend>audio_common</exec_depend>
   <exec_depend>respeaker_ros</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>tf_transformations</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>diagnostic_msgs</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -1,6 +1,6 @@
 [Unit]
 Description=MuSoHu Web Service for Script Management
-Documentation=https://github.com/gudivadaashok/MuSoHu
+Documentation=https://github.com/RobotiXX/MuSoHuV2
 After=network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=0
@@ -12,12 +12,13 @@ Group=GROUP_PLACEHOLDER
 WorkingDirectory=WEB_APP_DIR_PLACEHOLDER
 Environment="PATH=WEB_APP_DIR_PLACEHOLDER/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
+Environment="MUSOHU_WORKSPACE=WORKSPACE_PLACEHOLDER"
 
 # Main process - Run with uvicorn ASGI server
-ExecStart=WEB_APP_DIR_PLACEHOLDER/venv/bin/uvicorn app:app --host 0.0.0.0 --port PORT_PLACEHOLDER
+ExecStart="WEB_APP_DIR_PLACEHOLDER/venv/bin/python" -m uvicorn app:app --workers 1 --host 0.0.0.0 --port PORT_PLACEHOLDER
 
 # Restart Configuration - Always restart on failure
-Restart=always
+Restart=on-failure
 RestartSec=10
 
 # Start limit configuration - No limit on restart attempts
@@ -27,15 +28,18 @@ StartLimitBurst=0
 # WatchdogSec=30
 
 # Security hardening (optional)
-NoNewPrivileges=true
+# Offline phone sync uses narrowly permitted sudo date / set-ntp commands.
+NoNewPrivileges=false
 PrivateTmp=true
 
-# Resource limits (lightweight for single user - 256MB RAM, 25% CPU)
-# Typical usage: 50-100MB RAM, <10% CPU for single user
-# Adjust if needed for multiple concurrent users
-MemoryMax=256M
-MemoryHigh=200M
-CPUQuota=25%
+# The service owns ROS launches and rosbag children. Limits include the whole
+# cgroup; the old 256 MB / 25% CPU limits cannot support the sensor stack.
+MemoryHigh=3G
+MemoryMax=5G
+CPUWeight=100
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=45
 
 # Logging - All logs go to systemd journal
 StandardOutput=journal

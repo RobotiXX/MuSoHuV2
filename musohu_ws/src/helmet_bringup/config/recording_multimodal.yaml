@@ -1,0 +1,20 @@
+# Full rig; raw RGB/depth and clouds use substantial storage bandwidth.
+topics:
+  - /rslidar_points
+  - /witmotion_imu/imu
+  - /zed2i/zed_node/imu/data
+  - /zed2i/zed_node/imu/data_raw
+  - /zed2i/zed_node/odom
+  - /zed2i/zed_node/pose
+  - /zed2i/zed_node/pose/status
+  - /zed2i/zed_node/rgb/color/rect/image
+  - /zed2i/zed_node/rgb/color/rect/camera_info
+  - /zed2i/zed_node/depth/depth_registered
+  - /zed2i/zed_node/depth/camera_info
+  - /audio_stamped
+  - /audio_info
+  - /doa
+  - /vad
+  - /tf
+  - /tf_static
+  - /diagnostics

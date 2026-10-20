@@ -1,0 +1,13 @@
+# Evaluation recording manifest; consumed by scripts/record-evaluation.sh.
+# LiDAR point fields must be validated before choosing a LIO implementation.
+topics:
+  - /rslidar_points
+  - /witmotion_imu/imu
+  - /zed2i/zed_node/imu/data
+  - /zed2i/zed_node/imu/data_raw
+  - /zed2i/zed_node/odom
+  - /zed2i/zed_node/pose
+  - /zed2i/zed_node/pose/status
+  - /tf
+  - /tf_static
+  - /diagnostics

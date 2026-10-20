@@ -1,0 +1,27 @@
+[submodule "musohu_ws/src/zed-ros2-wrapper"]
+	path = musohu_ws/src/zed-ros2-wrapper
+	url = https://github.com/RobotiXX/zed-ros2-wrapper.git
+	branch = musohu-v2
+[submodule "musohu_ws/src/witmotion_IMU_ros"]
+	path = musohu_ws/src/witmotion_IMU_ros
+	url = https://github.com/RobotiXX/witmotion_IMU_ros.git
+	branch = musohu-v2
+[submodule "musohu_ws/src/zed-ros2-description"]
+	path = musohu_ws/src/zed-ros2-description
+	url = https://github.com/stereolabs/zed-ros2-description.git
+[submodule "musohu_ws/src/audio_common"]
+	path = musohu_ws/src/audio_common
+	url = https://github.com/RobotiXX/audio_common.git
+	branch = musohu-v2
+[submodule "musohu_ws/src/respeaker_ros"]
+	path = musohu_ws/src/respeaker_ros
+	url = https://github.com/RobotiXX/respeaker_ros.git
+	branch = musohu-v2
+[submodule "musohu_ws/src/rslidar_sdk"]
+	path = musohu_ws/src/rslidar_sdk
+	url = https://github.com/RobotiXX/rslidar_sdk.git
+	branch = musohu-v2
+[submodule "musohu_ws/src/rslidar_msg"]
+	path = musohu_ws/src/rslidar_msg
+	url = https://github.com/RobotiXX/rslidar_msg.git
+	branch = musohu-v2

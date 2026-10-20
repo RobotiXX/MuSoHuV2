@@ -17,7 +17,10 @@ install(DIRECTORY
 
 install(PROGRAMS
   scripts/action_generator.py
-  DESTINATION share/${PROJECT_NAME}
+  scripts/check_lidar_clock.py
+  scripts/clock_reference.py
+  scripts/time_sync_monitor.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
