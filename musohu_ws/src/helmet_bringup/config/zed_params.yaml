@@ -1,0 +1,46 @@
+# Overrides loaded AFTER the wrapper's common and ZED 2i configurations.
+# Target: wrapper 5.5 + SDK 5.5, Orin Nano 8 GB, walking helmet.
+/**:
+  ros__parameters:
+    general:
+      grab_resolution: HD720
+      grab_frame_rate: 30
+      pub_frame_rate: 15.0
+      enable_image_validity_check: 1
+      sdk_timestamp_clock: SYSTEM_CLOCK
+    video:
+      publish_rgb: true
+      publish_left_right: false
+      publish_raw: false
+    depth:
+      depth_mode: NEURAL_LIGHT
+      min_depth: 0.3
+      max_depth: 20.0
+      depth_stabilization: 30
+      publish_depth_map: true
+      publish_point_cloud: false
+    pos_tracking:
+      pos_tracking_enabled: true
+      pos_tracking_mode: GEN_3
+      compute_preference: PREFER_GPU
+      imu_fusion: true
+      area_memory: true
+      # Keep odom continuous; map carries loop corrections.
+      reset_odom_with_loop_closure: false
+      set_as_static: false
+      set_gravity_as_origin: true
+      floor_alignment: false
+      two_d_mode: false
+      path_pub_rate: 2.0
+      path_max_count: 6000
+    sensors:
+      sensors_image_sync: false
+      sensors_pub_rate: 200.0
+      publish_imu: true
+      publish_imu_raw: true
+    mapping:
+      mapping_enabled: false
+    object_detection:
+      od_enabled: false
+    body_tracking:
+      bt_enabled: false

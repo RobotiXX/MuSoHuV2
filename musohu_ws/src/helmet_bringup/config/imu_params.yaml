@@ -1,0 +1,37 @@
+witmotion:
+  ros__parameters:
+    port: witImu
+    baud_rate: 115200
+    polling_interval: 10
+    timeout_ms: 0
+    restart_service_name: /witmotion_imu/restart
+    imu_publisher:
+      topic_name: /witmotion_imu/imu
+      frame_id: imu_link
+      use_native_orientation: true
+      measurements:
+        acceleration:
+          enabled: true
+          # Zero means covariance unknown; estimate from stationary recordings.
+          covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        angular_velocity:
+          enabled: true
+          covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        orientation:
+          enabled: true
+          covariance: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    temperature_publisher:
+      enabled: false
+    magnetometer_publisher:
+      enabled: false
+    barometer_publisher:
+      enabled: false
+    altimeter_publisher:
+      enabled: false
+    orientation_publisher:
+      enabled: true
+      topic_name: /witmotion_imu/orientation
+    gps_publisher:
+      enabled: false
+    rtc_publisher:
+      enabled: false

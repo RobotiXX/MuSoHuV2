@@ -1,0 +1,6 @@
+# Run scripts/dummy-sensors.py in the same ROS_DOMAIN_ID as the web app.
+topics:
+  - /musohu_dummy/points
+  - /musohu_dummy/imu
+  - /musohu_dummy/odom
+  - /musohu_dummy/audio_stamped

@@ -1,50 +1,42 @@
-# Deployment Scripts
+# Web service deployment
 
-This directory contains scripts for deploying and setting up production services.
-
-## Scripts
-
-- **`setup_production_web_service.sh`** - Setup production web service with systemd integration
-
-## Templates
-
-- **`templates/musohu-web.service.template`** - Systemd service template for web service
-
-## Usage
-
-### Deploy Production Web Service
+Run these commands from the repository root **as the normal user**:
 
 ```bash
-sudo bash scripts/deploy/setup_production_web_service.sh
+./scripts/deploy/setup_production_web_service.sh --prepare-only
 ```
 
-This will:
-- Create Python virtual environment
-- Install all dependencies
-- Create systemd service file
-- Enable auto-start on boot
-- Start the service
-- Configure firewall
+This creates/reuses `web-app/venv`, installs Python requirements, renders
+`web-app/deploy/musohu-web.service` and checks it with systemd. It does not
+install or restart the running service. Build `musohu_ws` first; the installer
+requires its Humble overlay. Use `--port 8001` to render an alternate port.
 
-## Service Management
+Installation also runs `scripts/setup/setup_time_sync_permissions.sh` for
+narrow date/set-ntp permissions; the new unit permits those sudo commands to
+elevate. For a manual preview, run that permissions helper separately first. The optional `--with-power-modes` is for Jetson power
+benchmarks and is not required for the web app.
 
-After deployment, use the utility scripts:
+Review the generated unit, then migrate when ready:
 
 ```bash
-# Check status
-bash scripts/utils/manage_web_service.sh status
-
-# View logs
-bash scripts/utils/manage_web_service.sh logs
-
-# Restart service
-sudo bash scripts/utils/manage_web_service.sh restart
+./scripts/deploy/setup_production_web_service.sh --install --port 8000
 ```
 
-## Testing
+Only installation/service management uses sudo. This replaces, enables and
+restarts `musohu-web.service` and checks its HTTP health endpoint. It does not
+change WiFi, hotspot, DNS or firewall settings. The old service currently
+runs from `~/git/MuSoHu`; preparation alone preserves it.
 
-After deployment, verify the setup:
+The service uses one Uvicorn worker and this checkout's ROS workspace. Its
+memory limits account for ROS children, and SIGINT/shutdown timeouts allow
+bag flushing. Review those limits for sustained workloads on an 8 GB Nano.
 
 ```bash
-bash scripts/test/test_production_setup.sh
+systemctl status musohu-web.service
+journalctl -u musohu-web.service -n 100 --no-pager
+sudo systemctl restart musohu-web.service
 ```
+
+For a temporary preview and hardware-independent recording development, see
+[web-app/README.md](../../web-app/README.md). Do not start two applications
+controlling the same hardware simultaneously.

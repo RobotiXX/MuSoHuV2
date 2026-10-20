@@ -1,5 +1,13 @@
 # MuSoHu Production Web Service Setup
 
+> Historical deployment notes. For the current MuSoHuV2 workspace, use
+> [web-app/README.md](../../web-app/README.md) and
+> [scripts/deploy/README.md](../../scripts/deploy/README.md). The helper now runs
+> as the normal user, defaults to preparation only, and installs only with
+> `--install`. Old port/resource-limit examples below do not describe the
+> current service template.
+
+
 Production setup for the MuSoHu web application with automatic restart, resource limits, and deployment features.
 
 ---

@@ -1,4 +1,5 @@
 # MuSoHu: Multi-Modal Social Human Navigation (v2)
+Last updated: 2026-10-14
 
 Multi-Modal Social Human Navigation Dataset - A robotics research platform developed at George Mason University for collecting data on human-robot interactions in social navigation contexts.
 
@@ -29,8 +30,13 @@ The wearable data collection device includes:
 
 For complete documentation, setup instructions, and production deployment guides, see:
 
-- **[Production Web Service Setup](docs/PRODUCTION_WEB_SERVICE.md)** - Complete guide for deploying the web application
-- **[Production Setup Details](docs/PRODUCTION_SETUP.md)** - Detailed systemd configuration and monitoring
+- **[ROS 2 workspace](musohu_ws/README.md)** - Sensor sources, SDK setup, build, bringup and evaluation recording
+- **[Current work plan](TODO.md)** - Agreed ROS, odometry/IMU, recording and mechanical tasks
+- **[Contributor instructions](AGENTS.md)** - Project context and working conventions
+- **[Time synchronization](musohu_ws/TIME_SYNC.md)** - Offline phone/online NTP, software PTP and timestamp limits
+- **[Depth/power benchmark](musohu_ws/POWER_BENCHMARK.md)** - Recording power, neural depth modes and measurement scope
+- **[Web recording](web-app/README.md)** - Recording presets, session metadata and dummy publishers
+- **[Service deployment](scripts/deploy/README.md)** - Prepare and migrate the systemd service
 
 ## Overview
 
@@ -44,8 +50,10 @@ MuSoHu is a platform for collecting data for social navigation research. It is b
 - Helmet-mounted sensor suite for data collection
 
 ### Project Structure
-- `helmet_bringup/` - ROS2 launch files and sensor configurations
-- `web-app/` - Flask web interface for system control
+- `musohu_ws/` - ROS 2 Humble workspace with pinned sensor dependencies
+  - `src/helmet_bringup/` - Project launch files and sensor configurations
+  - `scripts/` - Dependency/SDK setup, symlink build, validation and recording helpers
+- `web-app/` - FastAPI/Uvicorn web interface for system control
 - `scripts/` - Setup, installation, and utility scripts
   - `setup/` - Installation and configuration scripts
   - `utils/` - Helper utilities and logging

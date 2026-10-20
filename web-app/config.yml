@@ -29,7 +29,7 @@ server:
 
 # Auto-refresh intervals (in seconds)
 refresh_intervals:
-  scripts: 5
+  scripts: 1
   disk_space: 10
   logs: 5
 
@@ -40,7 +40,7 @@ log_dirs:
     path: logs/
     description: "Web Application Logs"
   - key: ros2
-    path: /home/jetson/.ros/log/
+    path: ~/.ros/log/
     description: "ROS2 Helmet Logs"
   - key: system
     type: journalctl
@@ -55,7 +55,7 @@ log_viewer:
   # Directories to scan for log files automatically
   scan_directories:
     - enabled: true
-      path: /home/jetson/.ros/log/
+      path: ~/.ros/log/
       name_prefix: ROS2-
       description: "ROS2 runtime node logs"
   # Enable search functionality
@@ -64,3 +64,17 @@ log_viewer:
     max_results: 1000  # Maximum search results to return
     case_sensitive: false
 
+
+# Paths are relative to web-app unless absolute; MUSOHU_WORKSPACE and
+# MUSOHU_BAG_DIR override workspace/output for development and deployment.
+ros:
+  workspace: ../musohu_ws
+  underlay: /opt/ros/humble/setup.bash
+  bag_directory: ~/helmet_bags
+  topic_manifest: ../musohu_ws/src/helmet_bringup/config/recording_multimodal.yaml
+  topic_profiles:
+    Full rig: ../musohu_ws/src/helmet_bringup/config/recording_multimodal.yaml
+    Odometry evaluation: ../musohu_ws/src/helmet_bringup/config/recording_topics.yaml
+    Dummy sensors: ../musohu_ws/src/helmet_bringup/config/recording_dummy.yaml
+  process_log_directory: logs
+  stop_timeout_seconds: 30

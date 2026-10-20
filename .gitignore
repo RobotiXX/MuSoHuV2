@@ -64,6 +64,7 @@ helmet_logs/*.log
 helmet_logs/*.txt
 web-app/logs/*.log
 web-app/logs/*.txt
+web-app/deploy/
 scripts/logs/*.log
 scripts/logs/*.txt
 
@@ -91,6 +92,13 @@ src/install/
 .catkin_tools/
 
 # Custom project files
+*.db3
+*.mcap
+*.svo
+*.svo2
+*.area
+helmet_bags/
+.deps/
 *.pem
 *.key
 *.crt

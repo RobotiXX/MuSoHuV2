@@ -1,0 +1,20 @@
+# Pair with zed_stereo_no_depth.yaml; RGB is the left image, so no duplicate alias.
+topics:
+- /rslidar_points
+- /witmotion_imu/imu
+- /zed2i/zed_node/imu/data
+- /zed2i/zed_node/imu/data_raw
+- /zed2i/zed_node/odom
+- /zed2i/zed_node/pose
+- /zed2i/zed_node/pose/status
+- /zed2i/zed_node/left/color/rect/image
+- /zed2i/zed_node/left/color/rect/camera_info
+- /zed2i/zed_node/right/color/rect/image
+- /zed2i/zed_node/right/color/rect/camera_info
+- /audio_stamped
+- /audio_info
+- /doa
+- /vad
+- /tf
+- /tf_static
+- /diagnostics
