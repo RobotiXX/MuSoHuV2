@@ -2,7 +2,7 @@ witmotion:
   ros__parameters:
     port: witImu
     baud_rate: 115200
-    polling_interval: 10
+    polling_interval: 5
     timeout_ms: 0
     restart_service_name: /witmotion_imu/restart
     imu_publisher:
@@ -35,3 +35,4 @@ witmotion:
       enabled: false
     rtc_publisher:
       enabled: false
+      presync: false

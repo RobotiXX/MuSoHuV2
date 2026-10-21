@@ -1,4 +1,8 @@
 """Launch the Elettra WT901 driver from the RobotiXX Humble fork."""
+from pathlib import Path
+
+from ament_index_python.packages import get_package_share_directory
+import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -8,10 +12,13 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
+    config = Path(get_package_share_directory('helmet_bringup')) / 'config' / 'imu_params.yaml'
+    defaults = yaml.safe_load(config.read_text())['witmotion']['ros__parameters']
     return LaunchDescription([
         DeclareLaunchArgument('device', default_value='witImu',
                               description='Qt serial port name, e.g. witImu or ttyUSB0'),
-        DeclareLaunchArgument('baud', default_value='115200'),
+        DeclareLaunchArgument('baud', default_value=str(defaults['baud_rate']),
+                              description='Host serial baud rate; defaults to imu_params.yaml'),
         DeclareLaunchArgument('frame_id', default_value='imu_link'),
         Node(
             package='witmotion_ros', executable='witmotion_ros_node',
