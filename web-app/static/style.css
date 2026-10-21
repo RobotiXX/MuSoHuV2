@@ -1794,3 +1794,12 @@ button {
         font-size: 0.7rem;
     }
 }
+.sensor-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+.sensor-health-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.8rem; }
+.sensor-health-card h3 { margin: 0 0 0.6rem; }
+.health-pill { display: inline-block; border-radius: 1rem; padding: 0.2rem 0.6rem; background: #e2e8f0; color: #334155; }
+.health-healthy { background: #dcfce7; color: #166534; }
+.health-unhealthy, .health-starting { background: #fef3c7; color: #92400e; }
+.health-missing, .health-offline { background: #fee2e2; color: #991b1b; }
+.health-note { font-size: 0.85rem; color: #64748b; }
+.health-caution { color: #92400e; }

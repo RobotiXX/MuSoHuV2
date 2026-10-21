@@ -77,4 +77,5 @@ ros:
     Odometry evaluation: ../musohu_ws/src/helmet_bringup/config/recording_topics.yaml
     Dummy sensors: ../musohu_ws/src/helmet_bringup/config/recording_dummy.yaml
   process_log_directory: logs
+  health_state_file: ~/.local/state/musohu/sensor_health.json
   stop_timeout_seconds: 30

@@ -6,6 +6,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -23,7 +24,7 @@ def generate_launch_description():
         ))
     actions.extend([
         DeclareLaunchArgument('launch_static_tf', default_value='true',
-                              description='Publish nominal CAD sensor extrinsics'),
+                              description='Publish finalized sensor extrinsics'),
         DeclareLaunchArgument('extrinsics_file', default_value=PathJoinSubstitution([
             FindPackageShare('helmet_bringup'), 'config', 'sensor_extrinsics.yaml'])),
         IncludeLaunchDescription(
@@ -32,6 +33,15 @@ def generate_launch_description():
             ])), condition=IfCondition(LaunchConfiguration('launch_static_tf')),
             launch_arguments={'extrinsics_file': LaunchConfiguration('extrinsics_file')}.items(),
         ),
+        DeclareLaunchArgument('launch_health_monitor', default_value='true'),
+        Node(package='helmet_bringup', executable='sensor_health_monitor.py',
+             name='musohu_sensor_health', output='screen',
+             condition=IfCondition(LaunchConfiguration('launch_health_monitor')),
+             parameters=[PathJoinSubstitution([
+                 FindPackageShare('helmet_bringup'), 'config', 'sensor_health.yaml']),
+                 {key + '.enabled': ParameterValue(LaunchConfiguration('launch_' + sensor),
+                                                   value_type=bool)
+                  for key, sensor in [('witmotion', 'imu'), ('zed', 'zed'), ('audio', 'audio')]}]),
         DeclareLaunchArgument('launch_actions', default_value='false',
                               description='Publish legacy /action estimates from ZED odometry'),
         Node(package='helmet_bringup', executable='action_generator.py',

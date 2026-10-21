@@ -23,6 +23,12 @@ override paths. ROS children source only Humble and this workspace and use
 system Python, so the web environment need not contain ROS Python modules.
 Process output goes to files under `web-app/logs`, not undrained pipes.
 
+ROS children enforce `ROS_LOCALHOST_ONLY=1`, so sensor topics and recording
+communication stay on the Jetson. The workspace environment hook and service
+template apply the same policy. This does not restrict the HTTP listener:
+phones/laptops can still use the web UI over Wi-Fi. Session metadata records
+`ros_localhost_only` alongside `ros_domain_id` for auditing.
+
 The existing deployed service on port 8000 uses `~/git/MuSoHu`; changing this
 checkout does not update it. A deliberate migration is a separate step:
 
@@ -62,6 +68,16 @@ it automatically. The helper uses sudo for its narrow permission file.
    Stop during startup cancels the request. A forced termination is reported
    as failure instead of a successful save.
 
+The Sensor health panel polls `/api/sensors/health` once per second. Combined
+sensor bringup supplies a lightweight ROS rate monitor: WitMotion IMU 200 Hz,
+ZED odometry 30 Hz and stamped audio 15.625 messages/s (16 kHz audio in
+1,024-sample chunks). Healthy means within ±10% of expected; ±5% is the target,
+with a caution note between those limits. Startup, missing data, disabled
+sensors and an expired monitor are shown separately. LiDAR rate is explicitly
+not monitored. This does not check JPEG throughput or tracking accuracy: the
+current pilot retained about 16.6 Hz stereo images despite approximately 30 Hz
+odometry. See [workspace monitoring details](../musohu_ws/README.md#sensor-rate-health).
+
 Bags use `<label>_<UTC timestamp>_<unique suffix>`. Existing output is never
 replaced. Each bag has adjacent `.session.json` and `.recorder.log` files.
 Metadata includes selected/available topic types and QoS, source SHAs and dirty
@@ -70,9 +86,10 @@ reference and host clock state, timestamps, bag
 counts and finalization status. Publishers can exist without sending data;
 final results explicitly list any topics with zero messages.
 
-Full rig records RGB, depth and camera calibration, LiDAR, both IMU sources,
+Full rig records left/right JPEG stereo and both camera calibrations (no
+dense depth), LiDAR, both IMU sources including calibrated/raw ZED IMUs,
 ZED trajectories/tracking status, timestamped audio, audio format/DOA/VAD, TF
-and diagnostics. Raw images/clouds consume substantial storage. Inspect Disk
+and diagnostics. Compressed images and LiDAR clouds still consume substantial storage. Inspect Disk
 Space and use the smaller odometry preset when images/audio are unnecessary.
 [Time synchronization](../musohu_ws/TIME_SYNC.md) documents timestamp limits.
 

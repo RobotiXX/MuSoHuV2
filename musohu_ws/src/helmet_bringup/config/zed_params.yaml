@@ -5,20 +5,17 @@
     general:
       grab_resolution: HD720
       grab_frame_rate: 30
-      pub_frame_rate: 15.0
+      pub_frame_rate: 30.0
       enable_image_validity_check: 1
       sdk_timestamp_clock: SYSTEM_CLOCK
     video:
-      publish_rgb: true
-      publish_left_right: false
+      publish_rgb: false
+      publish_left_right: true
       publish_raw: false
+      publish_stereo: false
+      enable_24bit_output: true
     depth:
-      depth_mode: NEURAL_LIGHT
-      min_depth: 0.3
-      max_depth: 20.0
-      depth_stabilization: 30
-      publish_depth_map: true
-      publish_point_cloud: false
+      depth_mode: NONE
     pos_tracking:
       pos_tracking_enabled: true
       pos_tracking_mode: GEN_3
@@ -34,10 +31,11 @@
       path_pub_rate: 2.0
       path_max_count: 6000
     sensors:
+      # Keep full-rate IMU samples independent of image publication/subscribers.
       sensors_image_sync: false
       sensors_pub_rate: 200.0
-      publish_imu: true
-      publish_imu_raw: true
+      publish_imu: true # SDK calibrated IMU measurements and orientation
+      publish_imu_raw: true # uncalibrated accel/gyro; no orientation estimate
     mapping:
       mapping_enabled: false
     object_detection:

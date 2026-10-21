@@ -1,0 +1,21 @@
+musohu_sensor_health:
+  ros__parameters:
+    window_s: 10.0
+    report_period_s: 1.0
+    warmup_s: 5.0
+    stale_s: 2.0
+    target_tolerance: 0.05
+    healthy_tolerance: 0.10
+    witmotion:
+      enabled: true
+      topic: /witmotion_imu/imu
+      expected_hz: 200.0
+    zed:
+      enabled: true
+      topic: /zed2i/zed_node/odom
+      expected_hz: 30.0
+    audio:
+      enabled: true
+      topic: /audio_stamped
+      # 16000 samples/s divided by the pinned driver's 1024 samples/callback.
+      expected_hz: 15.625

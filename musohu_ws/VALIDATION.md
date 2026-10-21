@@ -1,5 +1,106 @@
 # Validation record
 
+## 2026-10-21: finalized sensor extrinsics
+
+The maintainer confirmed commit `2c33979` contains the accurate, final sensor
+extrinsics for the current rig. `config/sensor_extrinsics.yaml` in
+`helmet_bringup` is the canonical source for `zed2i_camera_link → rslidar`
+and `zed2i_camera_link → imu_link`. The to-do list marks this work complete;
+bringup and LIO integration should reuse these values. Numerical transforms
+and frame definitions are unchanged by this status/documentation update.
+
+## 2026-10-21: nominal JPEG stereo and web sensor-rate health
+
+Reviewed the maintainer's HD720/30 Hz, GEN_3/PREFER_GPU, depth NONE and 24-bit
+BGR settings against pinned wrapper source. The nominal Full rig manifest
+now records left/right `/color/rect/image/compressed` JPEG topics plus both
+classic CameraInfo topics, calibrated/raw ZED IMUs, odometry and map pose;
+the old RGB/depth requests were removed. The maintainer chose independent
+~200 Hz ZED IMUs: `sensors_image_sync` is false. A probe with the former true
+setting received no IMU messages without image subscribers. Source confirms
+that mode uses image-referenced sensor data; it is not a full-rate IMU mode.
+Runtime checks confirm NONE, GEN_3, BGR24, sync false, both IMU publishers
+enabled and no dense-depth image publisher. The installed JPEG plugin reported
+quality 95 on both cameras, saved in session metadata. Future sessions also
+capture the BGR24 and sensor-sync settings explicitly.
+
+Added `musohu_sensor_health` to combined bringup with selectable launch flag
+and per-sensor enabled states. It subscribes only to WitMotion IMU, ZED odom
+and small stamped audio chunks, targeting 200, 30 and 15.625 messages/s.
+Reports use monotonic receive time over 10 seconds, 5-second startup warmup,
+2-second missing-data timeout and 1 Hz output. ±10% is healthy; ±5% is the
+target. The web reads atomic snapshots, rejects stale/wrong-boot/wrong-domain
+data and shows LiDAR as not monitored. ROS `/diagnostics` retains the reports
+in bags. Health is receive throughput only, not image/timestamp/pose accuracy.
+
+The previous manual sensor launch was running without a recorder. Stopped it
+cleanly and restarted through the new preview web app on port 8001, so the UI
+now owns sensor start/stop. ReSpeaker was absent initially; the maintainer
+reconnected it and all three monitored streams became healthy. Existing
+recordings and the older service on 8000 were preserved. ROS stays local-only;
+no host clock, PTP, power-mode or network changes were made.
+
+The full 18-topic recording finalized with **72,281 messages** over **80.12 s**:
+WitMotion ~200.51 Hz; calibrated/raw ZED IMUs ~199.99 Hz each; odom and map pose
+~29.44 Hz; stamped audio ~15.62 Hz. All 2,362 ZED tracking-status samples were
+OK. The bag contains 1,331 images per camera, **all exactly paired by header
+stamp**, at ~16.64 Hz each. Sampled JPEGs decoded to 1280×720 BGR colour;
+camera calibrations were present. Odometry frames were `odom`, pose frames
+were `map`. Bag size was 1.855 GB. No selected topic was empty. The test
+harness initially used GET for stop and received 405; corrected to POST and
+finalized the same recording through the API, preserving all captured data.
+
+Important limits: two repeated header stamps occurred in each odom/pose
+stream, with no backwards steps there; each CameraInfo stream had one
+backwards transition. A later live probe again flagged odom/pose duplicates
+and CameraInfo transitions. These are recorded follow-ups, not a passed
+timestamp-consistency result. JPEG image stamps were strictly increasing.
+Both-stream JPEG reception without recording stayed ~16.1 Hz; left alone
+reached ~27.4 Hz. A runtime quality change to 80 was accepted but barely
+changed encoded sizes, so it is not a validated quality/performance sweep.
+Quality parameters were restored to 95. Do not promise 30 Hz saved images
+from the 30 Hz setting or from healthy odometry alone. No power, calibration,
+drift or long-route accuracy result is implied by this pilot.
+
+Validation passed: five rate-window unit tests, three snapshot-expiry tests,
+one real-ROS monitor test covering healthy→slow→missing and diagnostics,
+nine existing real-ROS recording tests and the expanded metadata regression.
+The ROS integration fixture initially used a separate context with the global
+executor; corrected the fixture and reran successfully. Browser checks covered
+compressed topic defaults, healthy/offline rendering, three real healthy
+cards, LiDAR skipped and desktop/mobile layout without page errors. Isolated
+domain-108 bag playback delivered both JPEGs, both ZED IMUs, odom and pose.
+Sequential symlink build, YAML/Python, package discovery and launch argument
+checks passed. Historical depth benchmark config/manifests were separated
+from nominal acquisition to preserve the benchmark's intended workload.
+
+Evidence is in ignored `musohu_ws/log/stereo-health-2026-10-21/`; the bag is
+under `~/helmet_bags/stereo_compressed_health_20261021_20261021T202907_543dc14e`.
+Session metadata records source SHAs, config contents/hashes, effective
+parameters and NTP reference. The new preview and sensor launch remain
+running for the maintainer, with the test recorder stopped.
+
+## 2026-10-21: localhost-only ROS communication
+
+Configured `ROS_LOCALHOST_ONLY=1` through the `helmet_bringup` workspace
+environment hook, web ROS command wrapper and systemd template. The current
+user's `~/.bashrc` sets it before the noninteractive early return; its previous
+contents were saved under `~/.local/state/musohu/`. Stopped the existing domain
+0/96 ROS CLI discovery daemons and restarted the idle new web preview on 8001
+with the setting. The older deployed 8000 service was not migrated.
+
+Sequential symlink build of `helmet_bringup`, Python/shell syntax checks,
+package discovery and combined-launch argument checks passed. Fresh-shell
+workspace sourcing and explicit `.bashrc` sourcing both changed an inherited
+`ROS_LOCALHOST_ONLY=0` to 1. The web command wrapper did the same. The real-ROS
+dummy recording start/flush/restart regression passed twice within its test,
+including saved `ros_localhost_only: "1"` metadata. The preview returned HTTP
+200, remained bound to `0.0.0.0:8001`, and its environment was checked directly.
+The dedicated software PTP service remained active/running. This change
+restricts ROS DDS; native LiDAR UDP/PTP and browser HTTP remain separate.
+No full hardware launch or second-machine visibility test was performed.
+Local logs are in `musohu_ws/log/localhost-2026-10-21/`.
+
 ## 2026-10-21: WT901 after external calibration/rate change
 
 The maintainer reports calibrating the sensor externally and selecting

@@ -77,8 +77,8 @@ def main():
     wrapper = REPO/'musohu_ws/src/zed-ros2-wrapper'
     report['zed_wrapper_worktree_diff'] = subprocess.check_output(['git','diff','HEAD','--'],cwd=wrapper,text=True)
     config_dir = REPO/'musohu_ws/src/helmet_bringup/config'
-    params_file = (args.params_file or config_dir/'zed_params.yaml').resolve()
-    topic_file = (args.topics or config_dir/'recording_multimodal.yaml').resolve()
+    params_file = (args.params_file or config_dir/'zed_depth_benchmark.yaml').resolve()
+    topic_file = (args.topics or config_dir/'recording_rgb_depth.yaml').resolve()
     topics = manager.validate_topics(yaml.safe_load(topic_file.read_text())['topics'])
     report.update(params_file=str(params_file),topic_manifest=str(topic_file),topics=topics)
     launch = None

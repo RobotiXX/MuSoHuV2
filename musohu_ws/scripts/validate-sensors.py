@@ -40,8 +40,10 @@ def main():
             '/zed2i/zed_node/odom': 'nav_msgs/msg/Odometry',
             '/zed2i/zed_node/pose': 'geometry_msgs/msg/PoseStamped',
             '/zed2i/zed_node/pose/status': 'zed_msgs/msg/PosTrackStatus',
-            '/zed2i/zed_node/rgb/color/rect/image': 'sensor_msgs/msg/Image',
-            '/zed2i/zed_node/depth/depth_registered': 'sensor_msgs/msg/Image',
+            '/zed2i/zed_node/left/color/rect/image/compressed': 'sensor_msgs/msg/CompressedImage',
+            '/zed2i/zed_node/right/color/rect/image/compressed': 'sensor_msgs/msg/CompressedImage',
+            '/zed2i/zed_node/left/color/rect/camera_info': 'sensor_msgs/msg/CameraInfo',
+            '/zed2i/zed_node/right/color/rect/camera_info': 'sensor_msgs/msg/CameraInfo',
         },
     }
     topics = {k: v for sensor in args.sensors for k, v in expected[sensor].items()}
@@ -81,6 +83,8 @@ def main():
             if msg.encoding == '32FC1':
                 values = np.frombuffer(msg.data, dtype='>f4' if msg.is_bigendian else '<f4')
                 rec['depth_finite_fraction'] = float(np.isfinite(values).mean())
+        if topics[topic].endswith('/CompressedImage'):
+            rec['compressed_image'] = {'format': msg.format, 'bytes': len(msg.data)}
         if topic in audio_squares:
             data = msg.audio.data if topic == '/audio_stamped' else msg.data
             rec['last_chunk_bytes'] = len(data)

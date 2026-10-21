@@ -1,4 +1,4 @@
-"""Publish the nominal CAD extrinsics beneath the ZED tracking frame."""
+"""Publish the finalized sensor extrinsics beneath the ZED tracking frame."""
 from pathlib import Path
 
 import yaml

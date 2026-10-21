@@ -90,7 +90,8 @@ def main():
                      'general.sdk_timestamp_clock','pos_tracking.pos_tracking_mode',
                      'pos_tracking.compute_preference','pos_tracking.imu_fusion',
                      'pos_tracking.area_memory','sensors.sensors_pub_rate',
-                     'video.publish_rgb','video.publish_left_right','depth.publish_depth_map']
+                     'video.publish_rgb','video.publish_left_right','video.enable_24bit_output',
+                     'sensors.sensors_image_sync','depth.publish_depth_map']
             client = node.create_client(GetParameters, '/zed2i/zed_node/get_parameters')
             effective_zed = 'unavailable: parameter service did not respond'
             # Some wrapper parameters are undeclared with depth NONE. Asking for
@@ -101,6 +102,12 @@ def main():
                 rclpy.spin_until_future_complete(node, future, timeout_sec=3)
                 if future.done() and future.result() is not None:
                     declared = set(future.result().result.names)
+                    # Plugin parameter prefixes vary by image_transport version.
+                    # Preserve the actual JPEG codec/quality used on both cameras.
+                    names += sorted(name for name in declared
+                                    if ('.left.color.rect.image.' in name or
+                                        '.right.color.rect.image.' in name)
+                                    and name.endswith(('.jpeg_quality', '.format')))
                     selected = [name for name in names if name in declared]
                     future = client.call_async(GetParameters.Request(names=selected))
                     rclpy.spin_until_future_complete(node, future, timeout_sec=3)
@@ -134,7 +141,8 @@ def main():
              clock_at_start=command_output(['timedatectl', 'show', '-p', 'NTPSynchronized', '-p', 'NTP']),
              clock_reference_at_start=reference_status(),
              ptp_service=command_output(['systemctl', 'show', 'musohu-ptp', '-p', 'ActiveState']),
-             ros_domain_id=os.environ.get('ROS_DOMAIN_ID', '0'))
+             ros_domain_id=os.environ.get('ROS_DOMAIN_ID', '0'),
+             ros_localhost_only=os.environ.get('ROS_LOCALHOST_ONLY', '0'))
         bag = Path(session['bag_path'])
         if stop_requested:
             save(status='stopped', stopped_at=utc(), finalized=False, message='Cancelled before recording began.')

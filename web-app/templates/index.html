@@ -45,6 +45,14 @@
             <p id="clock-result" role="status"></p>
         </section>
 
+        <section class="script-card" id="sensor-health">
+            <h2>Sensor health</h2>
+            <p id="sensor-health-summary" role="status">Checking sensor monitor…</p>
+            <p>Receive rates over 10 seconds. Target: ±5%; healthy: within ±10%. Updates once per second.</p>
+            <div id="sensor-health-cards" class="sensor-health-grid"></div>
+            <p class="health-note">Rate checks confirm data is arriving; they do not verify calibration, tracking quality or saved images.</p>
+        </section>
+
         <section class="script-card" id="recording-options">
             <h2>Recording session</h2>
             <label for="session-label">Session label</label>
@@ -92,6 +100,46 @@
         const pending = new Set();
         const activeStates = new Set(['starting', 'recording', 'running', 'stopping']);
         let changingTime = false;
+        function renderSensorHealth(state) {
+            document.getElementById('sensor-health-summary').textContent =
+                state.monitor_online ? 'Sensor monitor online' : (state.message || 'Sensor monitor unavailable');
+            const container = document.getElementById('sensor-health-cards');
+            container.replaceChildren();
+            const labels = {healthy:'Healthy', unhealthy:'Rate outside tolerance', missing:'No recent data',
+                starting:'Measuring…', disabled:'Disabled', offline:'Monitor offline', not_monitored:'Not monitored'};
+            for (const sensor of Object.values(state.sensors || {})) {
+                const card = document.createElement('div');
+                card.className = 'sensor-health-card';
+                const heading = document.createElement('h3'); heading.textContent = sensor.label;
+                const badge = document.createElement('span');
+                badge.className = 'health-pill health-' + sensor.status;
+                badge.textContent = labels[sensor.status] || 'Unknown';
+                const rate = document.createElement('p');
+                rate.textContent = sensor.expected_hz == null ? 'Rate check skipped' :
+                    `${sensor.observed_hz == null ? '—' : sensor.observed_hz.toFixed(2)} / ${sensor.expected_hz} Hz`;
+                const detail = document.createElement('p'); detail.className = 'health-note';
+                detail.textContent = sensor.reason || '';
+                if (sensor.deviation_percent != null) {
+                    detail.textContent += ` (${sensor.deviation_percent >= 0 ? '+' : ''}${sensor.deviation_percent.toFixed(1)}%)`;
+                    if (sensor.healthy && !sensor.target_met) detail.classList.add('health-caution');
+                }
+                if (sensor.last_message_age_s != null) {
+                    detail.textContent += ` · Last message ${sensor.last_message_age_s.toFixed(1)} s ago`;
+                }
+                card.append(heading, badge, rate, detail); container.append(card);
+            }
+        }
+        async function loadSensorHealth() {
+            try {
+                const response = await fetch('/api/sensors/health', {signal:AbortSignal.timeout(3000)});
+                if (!response.ok) throw new Error('Health request failed');
+                renderSensorHealth(await response.json());
+            } catch (error) {
+                renderSensorHealth({monitor_online:false, message:'Cannot reach sensor monitor',
+                    sensors:Object.fromEntries(['WitMotion IMU','ZED odometry','ReSpeaker audio','LiDAR']
+                        .map(label => [label,{label,status:'offline',reason:'Health information unavailable'}]))});
+            }
+        }
         async function loadTime() {
             const response = await fetch('/api/time');
             if (!response.ok) return;
@@ -224,6 +272,8 @@
         setInterval(() => loadScripts().catch(() => {}), {{ refresh_interval | int }} * 1000);
         loadTime().catch(() => {});
         setInterval(() => loadTime().catch(() => {}), 5000);
+        loadSensorHealth();
+        setInterval(loadSensorHealth, 1000);
     </script>
 </body>
 </html>

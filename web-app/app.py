@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request, Query, Body
 from starlette.concurrency import run_in_threadpool
 from process_manager import ProcessManager
 from clock_sync import ClockSync
+from sensor_health import read_sensor_health
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -169,6 +170,11 @@ async def list_scripts():
 @app.get("/api/recording/config")
 async def recording_config():
     return JSONResponse(content=manager.defaults())
+
+
+@app.get("/api/sensors/health")
+async def sensor_health():
+    return JSONResponse(content=await run_in_threadpool(read_sensor_health, manager))
 
 
 @app.get("/api/time")

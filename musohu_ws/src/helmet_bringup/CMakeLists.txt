@@ -8,6 +8,9 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 
+# Keep ROS DDS discovery and traffic on this host when sourcing the workspace.
+ament_environment_hooks("env-hooks/ros_localhost_only.dsv.in")
+
 # Install launch files
 install(DIRECTORY
   launch
@@ -20,6 +23,8 @@ install(PROGRAMS
   scripts/check_lidar_clock.py
   scripts/clock_reference.py
   scripts/time_sync_monitor.py
+  scripts/sensor_health_monitor.py
+  scripts/sensor_health_model.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

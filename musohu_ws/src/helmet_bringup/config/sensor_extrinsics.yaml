@@ -1,4 +1,5 @@
-# Nominal mechanical extrinsics from MuSoHu_CAD/MuSoHu_V2.stp (2026-10-08).
+# Final sensor extrinsics from MuSoHu_CAD/MuSoHu_V2.stp (2026-10-08).
+# Confirmed accurate and final by the maintainer on 2026-10-21 (commit 2c33979).
 # Translations are in meters in zed2i_camera_link: +X forward, +Y left, +Z up.
 # These frames match zed.launch.py, lidar_params.yaml and imu_params.yaml.
 parent_frame: zed2i_camera_link
@@ -7,7 +8,7 @@ transforms:
     translation: [-0.0528909590522126, 0.0, 0.102875240515295]
     rotation_xyzw: [0.0, 0.0, 0.0, 1.0]
   imu_link:
-    # Approximation: housing center, not a surveyed internal MEMS die position.
-    # CAD housing bottom/top Z=116.5/131.84 mm -> nominal centre Z=124.17 mm.
+    # Frame origin: housing center.
+    # CAD housing bottom/top Z=116.5/131.84 mm -> centre Z=124.17 mm.
     translation: [-0.1446409590522113, 0.0, 0.013545240515295]
     rotation_xyzw: [0.0, 0.0, 0.0, 1.0]

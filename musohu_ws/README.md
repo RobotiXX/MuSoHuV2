@@ -97,6 +97,25 @@ source install/setup.bash
 ros2 launch helmet_bringup helmet_sensors.launch.py --show-args
 ```
 
+## Local ROS communication
+
+Sourcing this workspace sets `ROS_LOCALHOST_ONLY=1`: ROS topics, services,
+actions and discovery stay on the Jetson. The web app enforces the same setting
+for its sensor and recording children, and the systemd template includes it.
+The current Jetson user's `~/.bashrc` also sets it for new terminal sessions.
+In a terminal that was already open, source the workspace again or run:
+
+```bash
+export ROS_LOCALHOST_ONLY=1
+ros2 daemon stop
+```
+
+Restart any ROS nodes started before the setting changed. Local CLI, RViz,
+recorders and sensor nodes must use the same ROS domain. Browser access to the
+web app over Wi-Fi still works; LiDAR UDP input and PTP on `eno1` continue
+normally. Run ROS inspection tools on the Jetson rather than another laptop.
+See the [Humble environment guide](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html#the-ros-localhost-only-variable).
+
 ## Bringup
 
 ```bash
@@ -113,11 +132,13 @@ ros2 launch helmet_bringup helmet_sensors.launch.py \
 ```
 
 The old `/action` estimator is opt-in with `launch_actions:=true`; it assumes
-the default ZED namespace. The combined launch also publishes nominal CAD
-extrinsics from `zed2i_camera_link` to `rslidar` and `imu_link`. The IMU origin
-approximates the housing center.
-before using these as calibration. Set `launch_static_tf:=false` to disable them
-or `extrinsics_file:=/absolute/path/to/extrinsics.yaml` to load refined values.
+the default ZED namespace. The combined launch also publishes the **finalized
+sensor extrinsics** from `zed2i_camera_link` to `rslidar` and `imu_link`,
+confirmed accurate and final by the maintainer on 2026-10-21 in commit
+`2c33979`. Canonical values are in `config/sensor_extrinsics.yaml`; the IMU
+frame origin is the housing center. Use these values for the current rig.
+Set `launch_static_tf:=false` to disable publication, or use
+`extrinsics_file:=/absolute/path/to/extrinsics.yaml` for a different hardware geometry.
 The WT901 port uses Qt's device name (`witImu`, not a copied `/dev/ttyUSB1`
 assumption); `baud` must match sensor firmware.
 The pinned WitMotion fork includes a shutdown fix: ROS shutdown is not called recursively,
@@ -134,25 +155,40 @@ ZED uses `ros_params_override_path`, retaining upstream camera/common defaults.
 The profile selects **GEN_3** with IMU fusion, area memory/loop closure and
 gravity alignment. Full 3D tracking suits a moving helmet; floor alignment,
 2D mode and static-camera mode are disabled. `PREFER_GPU` selects SDK 5.5's
-faster tracking option. HD720 capture is 30 Hz; image/depth publication is
-15 Hz and unsynchronized IMU publication is requested at 200 Hz. These are
-starting settings to benchmark, not measured performance guarantees.
+faster tracking option. The nominal profile captures HD720 at 30 Hz, requests
+30 Hz image publication, and records left/right **JPEG compressed images**
+plus both calibrations. Dense depth is disabled (`NONE`); 24-bit BGR output
+is enabled. Both calibrated and raw ZED IMUs are recorded independently at
+about 200 Hz (`sensors_image_sync: false`). Image sync would couple IMU output
+to image publication and can suppress it without image subscribers. Requested
+image rate is a cap, not a performance guarantee: the full-rig JPEG pilot
+recorded about 16.6 Hz per image, while odometry remained about 29.4 Hz.
 [Tracking modes](https://docs.stereolabs.com/docs/development/zed-sdk/modules/positional-tracking/modes),
 [ROS tracking parameters](https://docs.stereolabs.com/docs/integrations/ros-2/positional-tracking).
 
 Odometry is kept continuous across loop closures; corrected poses use `map`.
+`/zed2i/zed_node/odom` is `nav_msgs/Odometry`: its pose is relative to `odom`,
+with twist, covariance and a camera child frame. `/zed2i/zed_node/pose` is
+`geometry_msgs/PoseStamped`: the camera pose relative to `map`, including
+area-memory/loop-closure corrections. Thus pose can jump after relocalization
+while odometry stays continuous with `reset_odom_with_loop_closure: false`.
+The two poses need not be numerically equal. Record both to compare local
+motion against globally corrected trajectories; `map→odom` links their frames.
 When integrating another estimator, disable ZED TF publication as appropriate
 with `publish_tf:=false publish_map_tf:=false` in the individual ZED launch.
 Do not create two publishers for the same TF edge.
 
-Neural depth defaults to `NEURAL_LIGHT` for the Nano's compute budget; this is
-independent of choosing the newest tracking algorithm. Point cloud, mapping,
-body and object detection are disabled to reserve resources for recording/LIO.
-Increase depth quality only after measuring sustained frame rate and memory.
+The nominal workflow runs no dense depth. GEN_3 still computes VIO; disabling
+depth does not disable tracking. Point cloud, mapping, body and object
+detection remain disabled. `imu/data` carries SDK calibrated measurements
+and orientation; `imu/data_raw` carries uncalibrated acceleration/gyro without
+an orientation estimate. JPEG is lossy; the installed plugin used quality 95
+on both cameras, captured in recording metadata. Validate image quality for
+future offline depth/odometry processing.
 
-For **rectified left/right colour without dense depth**, use the paired
-capture profile and recording manifest below (commands from `musohu_ws`,
-after sourcing the workspace). GEN_3 VIO and ZED IMUs remain enabled.
+The old **15 Hz uncompressed stereo** profile is retained for comparison
+with the 2026-10-15 benchmark. It is separate from the nominal 30 Hz JPEG
+workflow. From `musohu_ws`, after sourcing the workspace:
 
 ```bash
 ros2 launch helmet_bringup helmet_sensors.launch.py \
@@ -170,6 +206,29 @@ does not disable GEN_3's own visual/inertial computation. See the measured
 [power comparison](POWER_BENCHMARK.md). Web topic selection alone does not
 change camera acquisition parameters; launch this profile before selecting
 its topics in the web recorder.
+
+## Sensor rate health
+
+Combined bringup starts `musohu_sensor_health`; disable it explicitly with
+`launch_health_monitor:=false` if another monitor is already running. It counts
+`/witmotion_imu/imu` at 200 Hz, `/zed2i/zed_node/odom` at 30 Hz and
+`/audio_stamped` at 15.625 messages/s. Audio is 16 kHz mono PCM16 in
+1,024-sample chunks, about 2 KB per message; VAD/DOA are event-driven and
+`/audio_info` is latched, so none provides a suitable capture-rate signal.
+LiDAR point-cloud rate is intentionally skipped. Disabled launch sensors
+are marked disabled, not missing.
+
+Settings are in `config/sensor_health.yaml`: a 10-second rolling receive-rate
+window, 5-second warmup, 2-second missing-data timeout and 1 Hz reports.
+Within ±10% is healthy, with a ±5% target and a caution note between those
+bounds. Both slow and unexpectedly fast streams are flagged outside ±10%.
+Rates use monotonic receive time, independent of UTC adjustments. Summaries
+publish on `/diagnostics` and atomically to
+`~/.local/state/musohu/sensor_health.json`; `MUSOHU_HEALTH_FILE` overrides the
+path. The web UI polls once per second and rejects snapshots older than four
+seconds, from another boot or another ROS domain. No image/cloud subscriptions
+are created by this monitor. These checks establish stream throughput, not
+image recording rate, tracking accuracy, synchronization or calibration.
 
 ## Evaluation recording and hardware checks
 

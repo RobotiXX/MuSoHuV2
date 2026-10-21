@@ -52,6 +52,8 @@ class ProcessManager:
         self.underlay = Path(ros.get('underlay', '/opt/ros/humble/setup.bash'))
         self.output = self.resolve(os.environ.get('MUSOHU_BAG_DIR', ros.get('bag_directory', '~/helmet_bags')))
         self.manifest = self.resolve(ros.get('topic_manifest', '../musohu_ws/src/helmet_bringup/config/recording_topics.yaml'))
+        self.health_path = self.resolve(os.environ.get('MUSOHU_HEALTH_FILE', ros.get(
+            'health_state_file', '~/.local/state/musohu/sensor_health.json')))
         self.profiles = {name:self.resolve(path) for name,path in ros.get('topic_profiles', {}).items()}
         self.logs = self.resolve(ros.get('process_log_directory', 'logs'))
         self.stop_timeout = float(ros.get('stop_timeout_seconds', 30))
@@ -86,8 +88,9 @@ class ProcessManager:
             raise ValueError(f'ROS setup is missing. Build workspace: {self.workspace}')
         # Shell text is fixed; every configurable value is a positional argument.
         return ['bash', '--noprofile', '--norc', '-c',
-                'source "$1" && source "$2" && shift 2 && exec "$@"',
-                'musohu-ros', str(self.underlay), str(overlay), *arguments]
+                'source "$1" && source "$2" && export ROS_LOCALHOST_ONLY=1 && '
+                'export MUSOHU_HEALTH_FILE="$3" && shift 3 && exec "$@"',
+                'musohu-ros', str(self.underlay), str(overlay), str(self.health_path), *arguments]
 
     def _spawn(self, key, arguments):
         self.logs.mkdir(parents=True, exist_ok=True)
