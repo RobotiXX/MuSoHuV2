@@ -129,7 +129,7 @@ power cycle. See [VALIDATION.md](VALIDATION.md).
 | --- | --- | --- |
 | Helios XYZIRT | PTP-disciplined native packet/point clock | Software PTP error, delivery latency, LIO field conversion |
 | ZED images, depth, IMU, VIO | SDK `SYSTEM_CLOCK` mapping to host time | USB/SDK mapping latency and cross-sensor offset; not direct PTP |
-| WT901 | Host receive time from the serial driver | Serial latency, 10 Hz sensor output, orientation freshness |
+| WT901 | Host receive time from the serial driver | Serial/polling latency and orientation freshness; ~200.5 Hz measured at 115200 baud on 2026-10-21 |
 | `/audio_stamped` | PortAudio ADC/current-time pair mapped to host UTC; receive-time fallback if unavailable | USB/audio oscillator drift and acoustic/IMU alignment |
 | `/audio` | Legacy headerless PCM16 | Bag receive time only; use `/audio_stamped` for new recording |
 
@@ -141,3 +141,42 @@ internet. A phone reference carries the phone's own UTC error plus uncalibrated
 HTTP/command latency; it is not an internet-disciplined precision time source.
 No measured inter-sensor offset, extrinsic calibration or LIO comparison has
 been claimed. Preserve raw data and calibrate timing before those experiments.
+
+## WT901 RTC output
+
+The sensor's time-output checkbox controls whether its calendar-time packet
+(`0x50`) is transmitted. A passive serial capture on 2026-10-21 found none,
+consistent with the maintainer leaving that output unchecked. Acceleration,
+gyro, Euler angles and magnetic field still arrived at about 200 Hz. This
+does not establish whether the internal clock keeps running when output is off.
+
+In the pinned Elettra-based driver:
+
+- `rtc_publisher.enabled: true` only decodes/publishes received `0x50` packets
+  as `rosgraph_msgs/msg/Clock`; the default topic is `/rtc`. Enabling the ROS
+  publisher does not enable the sensor's time-output mask. If experimenting,
+  use a diagnostic name such as `/witmotion_imu/rtc`, not `/clock`.
+- The IMU header remains `rclcpp::Clock().now()` at packet handling. RTC
+  publication neither changes that stamp nor sets Jetson system time, eno1
+  time, or LiDAR time. It does not provide PTP or a hardware sample trigger.
+- `rtc_publisher.presync: true`, together with RTC enabled, writes host-local
+  calendar fields into the sensor at driver start and saves its configuration.
+  The implementation writes registers separately with one-second sleeps;
+  this is not a validated millisecond synchronization procedure. It also
+  depends on the host already having correct time and timezone assumptions.
+  Leave it false in the production profile.
+
+The current workflow remains phone/NTP → Jetson UTC → software PTP → Helios;
+WT901 ROS timestamps use that same Jetson clock, with uncalibrated sensor,
+UART/USB and driver buffering delay. Time output may later help diagnose
+clock drift or support a measured sensor-to-host clock mapping, but that
+requires coherent time setting, sample association, drift/latency estimation
+and an explicit driver change. Simply publishing RTC does not implement it.
+At nominal 200 Hz with 8N1 framing, the four observed 11-byte packet types
+require about 88 kbit/s. Adding RTC brings this to 110 kbit/s, close to the
+115200 baud link's capacity; adding native quaternions too would require
+132 kbit/s. Verify a saved higher sensor baud rate before expanding output
+at 200 Hz, and remeasure actual packet rates rather than assuming them.
+ROS `/clock` and `use_sim_time` are a separate simulated/replay-time mechanism,
+not host-clock discipline; see the
+[ROS 2 clock design](https://design.ros2.org/articles/clock_and_time.html).

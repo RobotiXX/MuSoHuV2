@@ -1,5 +1,59 @@
 # Validation record
 
+## 2026-10-21: WT901 after external calibration/rate change
+
+The maintainer reports calibrating the sensor externally and selecting
+230400 baud/200 Hz. The edited YAML contained 230400 and 5 ms polling, but
+the launch file still overrode baud with a hard-coded 115200. Its default
+now reads the YAML baud rate; explicit `baud:=...` overrides remain supported.
+
+A launch explicitly using 230400 opened the port but produced no IMU or native
+quaternion messages. A passive raw-serial check found 36,800 undecodable bytes
+at 230400 over three seconds, then 602 valid packets of **each** acceleration,
+gyro, Euler-angle and magnetometer type at 115200 over three seconds. No sensor
+configuration/calibration/time commands were sent. With the maintainer's
+approval, the YAML baud is now 115200, retaining 5 ms polling. Do not claim
+230400 is active on the sensor; it must be reapplied/saved and reverified if
+needed later. Polling does not set the sensor's output frequency.
+
+At verified 115200, the 60-second live probe measured 200.48 Hz without issues.
+The approximately 64-second finalized bag contains 12,813 `sensor_msgs/Imu`
+messages in `imu_link`, header rate 200.51 Hz, all values finite, no duplicate
+or backward stamps, and quaternion norms 1 within floating-point precision.
+Mean acceleration magnitude was 9.809 m/s², mean gyro components approximately
+[0.000025, 0.000035, -0.000017] rad/s. These readout checks do not independently
+prove calibration accuracy, axis conventions or dynamic response. Median
+header interval was 4.89 ms, p99 10.67 ms, maximum 12.38 ms: host serial/poll
+buffering remains visible. Median bag-receive minus header time was 0.30 ms;
+this is ROS delivery delay, **not** sensor acquisition latency or synchronization
+error relative to LiDAR.
+
+A separate ten-second passive capture found 2,005 packets of each of the four
+types, zero checksum failures and no discarded nonheader bytes. No RTC (`0x50`)
+or native quaternion (`0x59`) packets appeared. The separate headerless
+`/witmotion_imu/orientation` topic was advertised but recorded zero messages;
+the IMU orientation is Euler-derived despite native preference being enabled.
+Source inspection also confirms the existing driver does not clear its Euler
+freshness flag after publishing, allowing previous-cycle angles with current
+acceleration/gyro. This remains an explicit pre-LIO follow-up, not a validated
+orientation/acquisition synchronization guarantee.
+
+Playback in isolated domain 97 delivered 838 IMU messages and stopped cleanly.
+Hardware checks used domain 96. Python/YAML checks, package discovery, sequential
+symlink build of `helmet_bringup` and `imu.launch.py --show-args` passed. A final
+launch without baud overrides confirms the corrected config/default path.
+No firmware, calibration, Jetson time, PTP or running web-service settings were
+changed. NTP is currently off and the stored host reference is not ready;
+these checks establish relative timestamp continuity, not absolute UTC accuracy.
+Sync phone/NTP before the next guarded full-stack session.
+
+RTC remains disabled, with `presync: false` explicit. Its publisher only exposes
+sensor calendar packets; it never changes IMU header stamps or disciplines
+the host/LiDAR. See [TIME_SYNC.md](TIME_SYNC.md) for implementation details and
+serial bandwidth implications. Evidence, raw capture, finalized bags, effective
+parameters, driver/library SHAs and playback result are ignored local artifacts
+under `musohu_ws/log/imu-validation-2026-10-21/`.
+
 ## 2026-10-15: stereo colour recording without dense depth
 
 Added opt-in `zed_stereo_no_depth.yaml` and `recording_stereo_no_depth.yaml`.
