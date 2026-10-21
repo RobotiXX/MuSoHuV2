@@ -113,8 +113,11 @@ ros2 launch helmet_bringup helmet_sensors.launch.py \
 ```
 
 The old `/action` estimator is opt-in with `launch_actions:=true`; it assumes
-the default ZED namespace. No unverified camera-to-LiDAR/IMU extrinsics are
-published. Measure those against the final helmet CAD before starting LIO.
+the default ZED namespace. The combined launch also publishes nominal CAD
+extrinsics from `zed2i_camera_link` to `rslidar` and `imu_link`. The IMU origin
+approximates the housing center.
+before using these as calibration. Set `launch_static_tf:=false` to disable them
+or `extrinsics_file:=/absolute/path/to/extrinsics.yaml` to load refined values.
 The WT901 port uses Qt's device name (`witImu`, not a copied `/dev/ttyUSB1`
 assumption); `baud` must match sensor firmware.
 The pinned WitMotion fork includes a shutdown fix: ROS shutdown is not called recursively,

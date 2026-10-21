@@ -22,6 +22,16 @@ def generate_launch_description():
             if sensor == 'zed' else (),
         ))
     actions.extend([
+        DeclareLaunchArgument('launch_static_tf', default_value='true',
+                              description='Publish nominal CAD sensor extrinsics'),
+        DeclareLaunchArgument('extrinsics_file', default_value=PathJoinSubstitution([
+            FindPackageShare('helmet_bringup'), 'config', 'sensor_extrinsics.yaml'])),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([
+                FindPackageShare('helmet_bringup'), 'launch', 'static_transforms.launch.py',
+            ])), condition=IfCondition(LaunchConfiguration('launch_static_tf')),
+            launch_arguments={'extrinsics_file': LaunchConfiguration('extrinsics_file')}.items(),
+        ),
         DeclareLaunchArgument('launch_actions', default_value='false',
                               description='Publish legacy /action estimates from ZED odometry'),
         Node(package='helmet_bringup', executable='action_generator.py',
