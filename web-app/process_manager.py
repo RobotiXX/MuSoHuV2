@@ -57,6 +57,10 @@ class ProcessManager:
         self.profiles = {name:self.resolve(path) for name,path in ros.get('topic_profiles', {}).items()}
         self.logs = self.resolve(ros.get('process_log_directory', 'logs'))
         self.stop_timeout = float(ros.get('stop_timeout_seconds', 30))
+        # Validate/snapshot at session start so editing the YAML affects the
+        # next recording, never an operation already in progress.
+        self.postprocess_config = ros.get('mcap_postprocess', {})
+        self.config_path = config.get('_config_path')
         self.lock = threading.RLock()
         self.processes = {}
         self.sessions = {}
@@ -75,6 +79,14 @@ class ProcessManager:
         return {'topics': self.validate_topics(topics), 'profiles': profiles, 'workspace': str(self.workspace),
                 'bag_directory': str(self.output)}
 
+    def postprocess_settings(self):
+        from mcap_postprocess import validate_config
+        value = self.postprocess_config
+        if self.config_path:
+            current = yaml.safe_load(Path(self.config_path).read_text()) or {}
+            value = current.get('ros', {}).get('mcap_postprocess', {})
+        return validate_config(value)
+
     @staticmethod
     def validate_topics(topics):
         if not isinstance(topics, list) or not topics or len(topics) > 256 or any(
@@ -86,8 +98,10 @@ class ProcessManager:
         overlay = self.workspace / 'install/setup.bash'
         if not self.underlay.is_file() or not overlay.is_file():
             raise ValueError(f'ROS setup is missing. Build workspace: {self.workspace}')
-        # Shell text is fixed; every configurable value is a positional argument.
+        # Do not let env-python3 ROS nodes use the API venv or lose their native
+        # dependencies. Shell text is fixed; configured values are positional.
         return ['bash', '--noprofile', '--norc', '-c',
+                'unset VIRTUAL_ENV PYTHONNOUSERSITE; export PATH=/usr/bin:/usr/local/bin:/bin; '
                 'source "$1" && source "$2" && export ROS_LOCALHOST_ONLY=1 && '
                 'export MUSOHU_HEALTH_FILE="$3" && shift 3 && exec "$@"',
                 'musohu-ros', str(self.underlay), str(overlay), str(self.health_path), *arguments]
@@ -121,7 +135,8 @@ class ProcessManager:
                 if active_sensor_processes():
                     raise ValueError('Another sensor launch or recorder is active. Stop it before starting this hardware launch.')
                 process, log = self._spawn(key, ['/usr/bin/python3', str(self.base / 'managed_exec.py'),
-                                               'ros2', 'launch', 'helmet_bringup', 'helmet_sensors.launch.py'])
+                                               'ros2', 'launch', 'helmet_bringup', 'helmet_sensors.launch.py',
+                                               f'bag_directory:={self.output}'])
                 self.last[key] = {'status': 'running', 'pid': process.pid, 'log_path': str(log)}
                 return self.last[key]
             if key != 'record_bag':
@@ -133,6 +148,7 @@ class ProcessManager:
                 self.require_clock_reference()
             # Validate ROS before creating a session directory or claiming startup.
             self.ros_command([])
+            postprocess = self.postprocess_settings()
             self.output.mkdir(parents=True, exist_ok=True)
             session_id = f'{label}_{datetime.now(timezone.utc):%Y%m%dT%H%M%S}_{uuid4().hex[:8]}'
             bag = self.output / session_id
@@ -140,7 +156,8 @@ class ProcessManager:
             session = {'session_id': session_id, 'label': label, 'status': 'starting',
                        'bag_path': str(bag), 'topics': topics,
                        'requested_at': datetime.now(timezone.utc).isoformat(),
-                       'workspace': str(self.workspace), 'error': None}
+                       'workspace': str(self.workspace), 'error': None,
+                       'mcap_postprocess_config': postprocess}
             atomic_json(state_path, session)
             self.sessions[key] = state_path
             try:
@@ -191,22 +208,41 @@ class ProcessManager:
                 result[key] = entry
             return result
 
-    def stop(self, key):
+    def stop(self, key, wait_postprocess=False):
         with self.lock:
             self.status()
             process = self.processes.get(key)
             if process is None:
                 return self.last.get(key, {'status': 'stopped', 'pid': None})
             if key in self.stopping:
-                return dict(self.last[key], status='stopping')
+                return dict(self.last[key])
             self.stopping.add(key)
             was_starting = self.last[key].get('status') == 'starting'
-            self.last[key]['status'] = 'stopping'
-            self.signal_group(process.pid, signal.SIGINT)
+            if self.last[key].get('status') != 'compressing':
+                self.last[key]['status'] = 'stopping'
+                self.signal_group(process.pid, signal.SIGINT)
         # Don't hold the lock while rosbag flushes: UI polls must see stopping.
         forced = False
         try:
-            process.wait(timeout=self.stop_timeout)
+            deadline = time.monotonic()+self.stop_timeout
+            processing = False
+            while process.poll() is None:
+                with self.lock:
+                    self._read_session(key)
+                    entry = self.last[key]
+                    if entry.get('status') == 'compressing':
+                        if not wait_postprocess:
+                            self.stopping.discard(key)
+                            return dict(entry)
+                        if not processing:
+                            deadline = time.monotonic()+entry['mcap_postprocess_config']['timeout_seconds']+10
+                            processing = True
+                if time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(process.args, self.stop_timeout)
+                time.sleep(.05)
+            # Complete process collection before releasing Stop ownership.
+            # wait() is idempotent if a concurrent status poll already reaped it.
+            process.wait(timeout=0)
         except subprocess.TimeoutExpired:
             forced = True
             try:
@@ -233,4 +269,4 @@ class ProcessManager:
 
     def close(self):
         for key in ('record_bag', 'helmet_nodes'):
-            self.stop(key)
+            self.stop(key, wait_postprocess=True)

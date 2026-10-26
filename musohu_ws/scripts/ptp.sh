@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #***********************************************************************
 # Configure software PTP serving on the dedicated MuSoHu LiDAR Ethernet link.
-# Description: NTP owns host time; ptp4l serves it without adjusting the clock.
+# Description: Phone/NTP owns host time; ptp4l serves it without adjusting the clock.
 # Usage: ./ptp.sh [--install | --status | --stop] [--interface eno1]
 # Examples: ./ptp.sh --status; ./ptp.sh --install --interface eno1
 # Prerequisites: Ubuntu 22.04, systemd, sudo for installation/service changes.
@@ -25,7 +25,7 @@ Usage: ptp.sh [--install | --status | --stop] [--interface eno1]
 Run as your normal user. Installation uses sudo. No network addresses,
 hotspot settings or host NTP service are changed. No phc2sys is started.
 Configure Helios TimeSyncSrc=PTP-E2E-L4, domain 0; verify Lock and real packet
-timestamps before enabling use_lidar_clock in ROS. See TIME_SYNC.md.
+timestamps before enabling use_lidar_clock in ROS. See README.md, Session clocks.
 HELP
             exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 2 ;;

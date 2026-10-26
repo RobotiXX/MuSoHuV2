@@ -6,7 +6,7 @@ Wants=network-online.target NetworkManager.service
 [Service]
 Type=oneshot
 ExecStartPre=/bin/sleep 10
-ExecStart=/home/jetson/git/MuSoHu/scripts/hotspot/start-hotspot.sh
+ExecStart="HOTSPOT_SCRIPT_PLACEHOLDER"
 RemainAfterExit=yes
 User=root
 Restart=on-failure

@@ -1,0 +1,21 @@
+[Unit]
+Description=MuSoHu loopback-only Zenoh router
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=USER_PLACEHOLDER
+Group=GROUP_PLACEHOLDER
+ExecStart="WORKSPACE_PLACEHOLDER/scripts/zenoh.sh" --router
+ExecStartPost="WORKSPACE_PLACEHOLDER/scripts/zenoh.sh" --check
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=15
+NoNewPrivileges=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

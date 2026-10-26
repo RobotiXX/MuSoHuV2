@@ -1,139 +1,45 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
 #***********************************************************************
-# Setup Hotspot Systemd Service
+# Install the hotspot boot service from this checkout.
+# Description: Render its absolute script path, verify, install and enable.
+# Usage: ./setup-hotspot-service.sh [--help]
+# Example: sudo bash scripts/hotspot/setup-hotspot-service.sh
+# Prerequisites: systemd, Python 3, NetworkManager; sudo for installation.
+# Author: MuSoHu Team
+# Date: 2026-10-21
 #***********************************************************************
-# This script configures the hotspot to start automatically on boot
-# It installs a systemd service that manages the hotspot lifecycle
-# and ensures the hotspot is available immediately after system startup
-#***********************************************************************
-
-#***********************************************************************
-# Help function
-#***********************************************************************
-
-show_help() {
-    cat << EOF
-Usage: sudo bash setup-hotspot-service.sh [OPTIONS]
-
-Install and enable the hotspot systemd service for automatic startup.
-
-This script:
-  - Installs the hotspot.service file to /etc/systemd/system/
-  - Reloads the systemd daemon
-  - Enables the service to start automatically on boot
-
-Service Management Commands:
-  Start now:        sudo systemctl start hotspot.service
-  Stop:             sudo systemctl stop hotspot.service
-  Restart:          sudo systemctl restart hotspot.service
-  Check status:     sudo systemctl status hotspot.service
-  Disable on boot:  sudo systemctl disable hotspot.service
-  View logs:        journalctl -u hotspot.service
-
-Options:
-  -h, --help     Display this help message and exit
-
-Examples:
-  sudo bash setup-hotspot-service.sh
-  sudo bash setup-hotspot-service.sh --help
-
-Prerequisites:
-  - DNS must be configured first using setup-hotspot-dns.sh
-  - hotspot.service file must exist in the same directory
-
-Note: This script requires root privileges to install systemd services.
-
-EOF
-}
-
-# Parse command line arguments
+set -euo pipefail
 while [[ $# -gt 0 ]]; do
-    case $1 in
+    case "$1" in
         -h|--help)
-            show_help
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
-            exit 1
-            ;;
+            cat <<'HELP'
+Usage: setup-hotspot-service.sh [--help]
+Install/enable hotspot.service using the start script in this checkout.
+Does not start/restart the hotspot or disconnect the current Wi-Fi session.
+On the next boot or explicit restart, the hotspot uses 10.42.0.1/24;
+open http://10.42.0.1:8000 for the web app. NetworkManager provides DHCP/DNS.
+Run as a normal user with sudo access, or as root.
+HELP
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 2 ;;
     esac
-    shift
 done
-
-# Get script directory and source utilities
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-Service_Service_File="$SCRIPT_DIR/hotspot.service"
-source "$(dirname "$SCRIPT_DIR")/utils/logging_config.sh"
-
-log_info "Starting hotspot service setup..."
-log_separator
-
-#***********************************************************************
-# Install systemd service
-#***********************************************************************
-
-# Copy service file to systemd directory
-log_info "Installing hotspot systemd service..."
-sudo cp "$Service_Service_File" /etc/systemd/system/
-
-if [ $? -eq 0 ]; then
-    log_success "Service file copied to /etc/systemd/system/"
-else
-    log_error "Failed to copy service file"
-    exit 1
-fi
-
-#***********************************************************************
-# Configure systemd to recognize the service
-#***********************************************************************
-
-# Reload systemd daemon to recognize new service
-log_info "Reloading systemd daemon..."
+hotspot_setup_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$hotspot_setup_dir/../utils/logging_config.sh"
+trap 'log_error "Hotspot service installation failed at line $LINENO"' ERR
+hotspot_setup_stage=$(mktemp -d)
+trap 'rm -rf -- "$hotspot_setup_stage"' EXIT
+python3 - "$hotspot_setup_dir" "$hotspot_setup_stage/hotspot.service" <<'PYTHON'
+from pathlib import Path
+import sys
+source, destination = Path(sys.argv[1]), Path(sys.argv[2])
+script = str(source/'start-hotspot.sh').replace('\\','\\\\').replace('"','\\"').replace('%','%%')
+text = (source/'hotspot.service').read_text().replace('HOTSPOT_SCRIPT_PLACEHOLDER',script)
+assert 'PLACEHOLDER' not in text
+destination.write_text(text)
+PYTHON
+systemd-analyze verify "$hotspot_setup_stage/hotspot.service"
+sudo install -m 0644 "$hotspot_setup_stage/hotspot.service" /etc/systemd/system/hotspot.service
 sudo systemctl daemon-reload
-
-if [ $? -eq 0 ]; then
-    log_success "Systemd daemon reloaded successfully"
-else
-    log_error "Failed to reload systemd daemon"
-    exit 1
-fi
-
-#***********************************************************************
-# Enable service for automatic startup
-#***********************************************************************
-
-# Enable the service to start on boot
-log_info "Enabling hotspot service to start on boot..."
 sudo systemctl enable hotspot.service
-
-if [ $? -eq 0 ]; then
-    log_success "Hotspot service enabled for automatic startup"
-else
-    log_error "Failed to enable hotspot service"
-    exit 1
-fi
-
-#***********************************************************************
-# Service setup complete
-#***********************************************************************
-
-log_separator
-log_success "Hotspot service installed and enabled successfully"
-log_separator
-
-echo ""
-log_info "Service Management Commands:"
-log_info "  Start now:        sudo systemctl start hotspot.service"
-log_info "  Stop:             sudo systemctl stop hotspot.service"
-log_info "  Restart:          sudo systemctl restart hotspot.service"
-log_info "  Check status:     sudo systemctl status hotspot.service"
-log_info "  Disable on boot:  sudo systemctl disable hotspot.service"
-log_info "  View logs:        journalctl -u hotspot.service"
-echo ""
-
-log_separator
-log_info "The hotspot will start automatically on next boot"
-log_separator
+log_success 'Hotspot boot service installed; current Wi-Fi connection unchanged.'

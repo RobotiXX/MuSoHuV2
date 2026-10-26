@@ -1,7 +1,8 @@
 [Unit]
 Description=MuSoHu Web Service for Script Management
 Documentation=https://github.com/RobotiXX/MuSoHuV2
-After=network-online.target
+After=network-online.target musohu-zenoh.service
+Requires=musohu-zenoh.service
 Wants=network-online.target
 StartLimitIntervalSec=0
 
@@ -12,8 +13,11 @@ Group=GROUP_PLACEHOLDER
 WorkingDirectory=WEB_APP_DIR_PLACEHOLDER
 Environment="PATH=WEB_APP_DIR_PLACEHOLDER/venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONNOUSERSITE=1"
 Environment="MUSOHU_WORKSPACE=WORKSPACE_PLACEHOLDER"
 Environment="ROS_LOCALHOST_ONLY=1"
+Environment="RMW_IMPLEMENTATION=rmw_zenoh_cpp"
+Environment="RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS"
 
 # Main process - Run with uvicorn ASGI server
 ExecStart="WEB_APP_DIR_PLACEHOLDER/venv/bin/python" -m uvicorn app:app --workers 1 --host 0.0.0.0 --port PORT_PLACEHOLDER
@@ -40,7 +44,7 @@ MemoryMax=5G
 CPUWeight=100
 KillSignal=SIGINT
 KillMode=mixed
-TimeoutStopSec=45
+TimeoutStopSec=1900
 
 # Logging - All logs go to systemd journal
 StandardOutput=journal

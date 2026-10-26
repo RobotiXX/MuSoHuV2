@@ -21,7 +21,7 @@ Run with sensor launches stopped, as your normal user. Does not reboot the
 Jetson, reset its USB controller, or change persistent device/network settings.
 This is a recovery attempt, not a guarantee that a failed port will recover.
 If camera video does not return, inspect the cable/hub/power path and save the
-kernel log before a planned host power cycle. See musohu_ws/VALIDATION.md.
+kernel log before a planned host power cycle. See musohu_ws/README.md.
 HELP
         exit 0 ;;
     --check|--reset) ;;

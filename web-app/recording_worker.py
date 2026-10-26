@@ -1,4 +1,4 @@
-"""ROS-aware rosbag supervisor. Run through the configured workspace underlay."""
+"""ROS service client and session supervisor for the helmet C++ bag recorder."""
 import argparse
 import ctypes
 from datetime import datetime, timezone
@@ -6,7 +6,6 @@ import json
 import hashlib
 import os
 from pathlib import Path
-import re
 import signal
 import subprocess
 import time
@@ -14,6 +13,7 @@ import time
 import yaml
 from process_manager import atomic_json
 from clock_sync import reference_status
+from bag_recorder_config import load_recorder_config, validate_ros_plugins
 
 
 def utc():
@@ -40,13 +40,16 @@ def main():
     signal.signal(signal.SIGINT, on_signal)
     signal.signal(signal.SIGTERM, on_signal)
     # If the API process crashes, finalize its recording instead of orphaning
-    # a recorder. Children are signaled by this supervisor's cleanup below.
+    # a recorder. Cleanup asks the native node to stop; its lease covers SIGKILL.
     parent_pid = os.getppid()
     if ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGINT, 0, 0, 0) != 0:
         raise OSError(ctypes.get_errno(), 'Unable to register parent-death signal')
     if parent_pid == 1 or os.getppid() != parent_pid:
         stop_requested = True
-    child = None
+    service_attempted = False
+    service_closed = False
+    stop_client = None
+    stop_request = None
     node = None
     context_started = False
 
@@ -54,7 +57,57 @@ def main():
         session.update(updates)
         atomic_json(args.session, session)
 
+    def save_finished():
+        bag = Path(session['bag_path'])
+        native = json.loads((bag / 'recording_metadata.json').read_text())
+        if (native.get('session_id') != session['session_id'] or
+                native.get('bag_uri') != str(bag) or not native.get('finalized') or
+                native.get('status') != 'stopped' or native.get('error')):
+            raise RuntimeError('Native recorder has not confirmed this session finalized')
+        metadata_path = bag / 'metadata.yaml'
+        metadata = yaml.safe_load(metadata_path.read_text())['rosbag2_bagfile_information']
+        counts = {entry['topic_metadata']['name']: entry['message_count']
+                  for entry in metadata['topics_with_message_count']}
+        postprocess_config = session.get('mcap_postprocess_config', {'enabled': False})
+        save(status='compressing' if postprocess_config.get('enabled') else 'stopped',
+             stopped_at=utc(), finalized=True, exit_code=0,
+             message_count=metadata['message_count'], topic_counts=counts,
+             bag_storage={'storage_identifier': metadata['storage_identifier'],
+                          'serialization_formats': sorted({entry['topic_metadata']['serialization_format']
+                              for entry in metadata['topics_with_message_count']}),
+                          'compression_mode': (metadata.get('compression_mode') or 'none').lower(),
+                          'compression_format': metadata.get('compression_format') or ''},
+             topics_without_messages=[t for t in session['topics'] if not counts.get(t)],
+             duration_ns=metadata['duration']['nanoseconds'],
+             clock_at_stop=command_output(['timedatectl', 'show', '-p', 'NTPSynchronized', '-p', 'NTP']),
+             clock_reference_at_stop=reference_status())
+        save(native_finish_reason=native.get('finish_reason'))
+        if postprocess_config.get('enabled'):
+            from mcap_postprocess import compress_bag
+            try:
+                result = compress_bag(bag, postprocess_config,
+                    progress=lambda **updates: save(mcap_postprocess=dict(status='running', **updates)))
+            except Exception as exc:
+                # Recording succeeded. A compression error must not erase that
+                # fact or retry/delete the valid source behind the user's back.
+                result = dict(status='failed', error=str(exc), recording_preserved=True)
+            save(status='stopped', mcap_postprocess=result)
+
     try:
+        # This supervisor only exchanges control RPCs and graph metadata. Pinned
+        # Humble Zenoh 0.1.11 produced malformed SHM ListParameters replies in
+        # the deployed worker; loopback TCP avoids that failure. Sensor and
+        # native-recorder endpoints retain the tuned SHM data path.
+        if os.environ.get('RMW_IMPLEMENTATION') == 'rmw_zenoh_cpp':
+            os.environ['ZENOH_CONFIG_OVERRIDE'] = os.environ.get('ZENOH_CONFIG_OVERRIDE','') + ';transport/shared_memory/enabled=false'
+        save(middleware_environment={key:os.environ.get(key) for key in (
+            'RMW_IMPLEMENTATION', 'RMW_FASTRTPS_PUBLICATION_MODE', 'ROS_LOCALHOST_ONLY',
+            'ZENOH_CONFIG_OVERRIDE', 'RMW_ZENOH_BUFFER_POOL_MAX_SIZE_BYTES',
+            'ZENOH_ROUTER_CHECK_ATTEMPTS', 'LD_LIBRARY_PATH', 'PYTHONPATH')})
+        recorder_config = load_recorder_config()
+        save(bag_recorder_config=recorder_config)
+        settings = recorder_config['settings']
+        validate_ros_plugins(settings)
         import rclpy
         from rclpy.signals import SignalHandlerOptions
         rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
@@ -79,7 +132,8 @@ def main():
             raise RuntimeError('Selected topic has conflicting publisher types.')
         qos = {t: [{'node_name': e.node_name, 'node_namespace': e.node_namespace,
                     'type': e.topic_type, 'reliability': int(e.qos_profile.reliability),
-                    'durability': int(e.qos_profile.durability)} for e in endpoints]
+                    'durability': int(e.qos_profile.durability),
+                    'history': int(e.qos_profile.history), 'depth': e.qos_profile.depth} for e in endpoints]
                for t, endpoints in publishers.items()}
         effective_zed = None
         if any(t.startswith('/zed2i/zed_node/') for t in session['topics']):
@@ -87,7 +141,9 @@ def main():
             from rclpy.parameter import parameter_value_to_python
             names = ['depth.depth_mode','depth.depth_stabilization',
                      'general.grab_resolution','general.grab_frame_rate','general.pub_frame_rate',
-                     'general.sdk_timestamp_clock','pos_tracking.pos_tracking_mode',
+                     'general.sdk_timestamp_clock','general.pub_resolution','general.pub_downscale_factor',
+                     'general.grab_compute_capping_fps','video.publish_raw','video.publish_stereo',
+                     'pos_tracking.pos_tracking_mode',
                      'pos_tracking.compute_preference','pos_tracking.imu_fusion',
                      'pos_tracking.area_memory','sensors.sensors_pub_rate',
                      'video.publish_rgb','video.publish_left_right','video.enable_24bit_output',
@@ -105,9 +161,8 @@ def main():
                     # Plugin parameter prefixes vary by image_transport version.
                     # Preserve the actual JPEG codec/quality used on both cameras.
                     names += sorted(name for name in declared
-                                    if ('.left.color.rect.image.' in name or
-                                        '.right.color.rect.image.' in name)
-                                    and name.endswith(('.jpeg_quality', '.format')))
+                                    if '.image.' in name and
+                                    name.endswith(('.jpeg_quality', '.format')))
                     selected = [name for name in names if name in declared]
                     future = client.call_async(GetParameters.Request(names=selected))
                     rclpy.spin_until_future_complete(node, future, timeout_sec=3)
@@ -116,10 +171,6 @@ def main():
                         if len(values) == len(selected):
                             effective_zed = dict(zip(selected, [parameter_value_to_python(v) for v in values]))
                             effective_zed['_undeclared'] = [name for name in names if name not in declared]
-        node.destroy_node()
-        node = None
-        rclpy.shutdown()
-        context_started = False
         repo = Path(session['workspace']).parent
         sdk = Path('/usr/local/zed/zed-config-version.cmake')
         configs = {}
@@ -147,57 +198,93 @@ def main():
         if stop_requested:
             save(status='stopped', stopped_at=utc(), finalized=False, message='Cancelled before recording began.')
             return 0
-        recorder_log = Path(str(bag) + '.recorder.log')
-        session['recorder_log'] = str(recorder_log)
-        with recorder_log.open('x') as log:
-            child = subprocess.Popen(['ros2', 'bag', 'record', '-o', str(bag), *session['topics']],
-                                     stdout=log, stderr=subprocess.STDOUT,
-                                     env=dict(os.environ, RCUTILS_COLORIZED_OUTPUT='0'))
-            deadline = time.monotonic() + 15
-            ready = False
-            while child.poll() is None and not stop_requested:
-                text = recorder_log.read_text(errors='replace')
-                subscribed = set(re.findall(r"Subscribed to topic ['\"]([^'\"]+)['\"]", text))
-                if not ready and 'Recording...' in text and set(session['topics']).issubset(subscribed):
-                    ready = True
-                    save(status='recording', started_at=utc(), recorder_pid=child.pid)
-                if not ready and time.monotonic() > deadline:
-                    raise RuntimeError('Recorder did not confirm subscriptions before startup timeout.')
-                time.sleep(0.1)
-            if stop_requested:
-                save(status='stopping')
-                # The manager signals our whole group, including the recorder.
-                # Relay directly if invoked manually with only this PID signaled.
-                try:
-                    child.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    child.send_signal(signal.SIGINT)
-                child.wait(timeout=20)
-            code = child.wait(timeout=5)
+        from musohu_bag_recorder.srv import TriggerBagRecording, StopBagRecording, GetBagRecordingState
+        from rclpy.utilities import get_rmw_implementation_identifier
+        start_client = node.create_client(TriggerBagRecording, '/musohu/recorder/start')
+        stop_client = node.create_client(StopBagRecording, '/musohu/recorder/stop')
+        state_client = node.create_client(GetBagRecordingState, '/musohu/recorder/get_state')
+
+        def call(client, request, timeout=5):
+            future = client.call_async(request)
+            rclpy.spin_until_future_complete(node, future, timeout_sec=timeout)
+            if not future.done():
+                future.cancel()
+                raise RuntimeError('Recorder service did not respond: ' + client.srv_name)
+            if future.exception():
+                raise RuntimeError('Recorder service failed: ' + str(future.exception()))
+            return future.result()
+
+        if not start_client.wait_for_service(timeout_sec=5):
+            raise RuntimeError('Recorder service unavailable. Start helmet nodes, or launch the standalone recorder for dummy testing.')
+        if stop_requested:
+            save(status='stopped', stopped_at=utc(), finalized=False, message='Cancelled before recording began.')
+            return 0
+        stop_request = StopBagRecording.Request(session_id=session['session_id'])
+        request = TriggerBagRecording.Request(
+            session_id=session['session_id'], reason='web_or_benchmark',
+            bag_uri=str(bag), topics=session['topics'], settings_json=json.dumps(settings),
+            context_json=json.dumps(session), owner_timeout_sec=8.0)
+        save(recorder_backend='musohu_bag_recorder/rosbag2_cpp',
+             recorder_services={'start': start_client.srv_name, 'stop': stop_client.srv_name,
+                                'state': state_client.srv_name},
+             rmw_implementation=get_rmw_implementation_identifier(),
+             cyclone_uri=os.environ.get('CYCLONEDDS_URI'))
+        service_attempted = True
+        response = call(start_client, request)
+        if not response.success:
+            raise RuntimeError(response.message)
+        if response.bag_uri != str(bag):
+            raise RuntimeError('Recorder returned a different bag path')
+        deadline = time.monotonic() + 15
+        ready = False
+        while not stop_requested:
+            state = json.loads(call(state_client, GetBagRecordingState.Request(
+                session_id=session['session_id'], renew_lease=True)).state_json)
+            if state['session_id'] != session['session_id']:
+                raise RuntimeError('Native recorder session ownership changed unexpectedly')
+            if state['status'] in ('failed', 'stopped'):
+                raise RuntimeError(state.get('error') or 'Native recorder stopped unexpectedly')
+            if not ready and state['status'] == 'recording' and set(session['topics']).issubset(state['subscribed_topics']):
+                ready = True
+                save(status='recording', started_at=state['started_at'],
+                     recorder_pid=state['recorder_pid'], recorder_settings=state['settings'])
+            if not ready and time.monotonic() > deadline:
+                raise RuntimeError('Recorder did not confirm subscriptions before startup timeout.')
+            time.sleep(0.2)
+        save(status='stopping')
+        response = call(stop_client, stop_request, timeout=25)
+        if not response.success or response.recording or not response.finalized or response.bag_uri != str(bag):
+            raise RuntimeError(response.message or 'Native recorder did not confirm finalization')
+        service_closed = True
         metadata_path = bag / 'metadata.yaml'
-        if code != 0 or not metadata_path.is_file():
-            raise RuntimeError(f'Recorder exited {code}; bag metadata/finalization missing. See {recorder_log}')
-        metadata = yaml.safe_load(metadata_path.read_text())['rosbag2_bagfile_information']
-        counts = {entry['topic_metadata']['name']: entry['message_count']
-                  for entry in metadata['topics_with_message_count']}
-        save(status='stopped', stopped_at=utc(), finalized=True, exit_code=code,
-             message_count=metadata['message_count'], topic_counts=counts,
-             topics_without_messages=[t for t in session['topics'] if not counts.get(t)],
-             duration_ns=metadata['duration']['nanoseconds'],
-             clock_at_stop=command_output(['timedatectl', 'show', '-p', 'NTPSynchronized', '-p', 'NTP']),
-             clock_reference_at_stop=reference_status())
+        if not metadata_path.is_file():
+            raise RuntimeError('Native recorder reported finalization but bag metadata is missing')
+        save_finished()
         return 0
     except Exception as exc:
-        save(status='failed', error=str(exc), stopped_at=utc(), finalized=False)
+        # A launched recorder can finish during ROS launch/API shutdown before
+        # replying to Stop. Accept only its matching, explicit finalization
+        # record plus readable bag metadata; presence of a bag alone is not enough.
+        if service_attempted:
+            try:
+                save_finished()
+                service_closed = True
+                return 0
+            except (OSError, ValueError, KeyError, RuntimeError, TypeError, yaml.YAMLError):
+                pass
+        save(status='failed', error=str(exc), stopped_at=utc(), finalized=False,
+             loaded_middleware_libraries=sorted({line.split()[-1] for line in
+                 Path('/proc/self/maps').read_text().splitlines()
+                 if any(name in line for name in ('fastcdr', 'fastrtps', 'rmw_', 'zenoh'))}))
         return 1
     finally:
-        if child is not None and child.poll() is None:
-            child.send_signal(signal.SIGINT)
+        if service_attempted and not service_closed and node is not None and stop_client is not None:
             try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait()
+                # Stop only this session; the native lease is the final fallback
+                # if this worker cannot reach the service or is forcibly killed.
+                call(stop_client, stop_request, timeout=25)
+            except Exception:
+                pass
         if node is not None:
             node.destroy_node()
         if context_started:

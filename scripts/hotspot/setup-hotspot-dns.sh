@@ -36,10 +36,10 @@ Network Configuration:
 Access URLs (after hotspot is started):
   Hostname-based:
     - http://robotixx:6080 (ROS2 VNC)
-    - http://robotixx:5001 (Web App)
+    - http://robotixx:8000 (Web App)
   IP-based:
     - http://10.42.0.1:6080 (ROS2 VNC)
-    - http://10.42.0.1:5001 (Web App)
+    - http://10.42.0.1:8000 (Web App)
 
 Options:
   -h, --help     Display this help message and exit
@@ -179,11 +179,11 @@ log_info "Devices connected to hotspot can now access services using:"
 log_info ""
 log_info "  Hostname-based URLs:"
 log_info "    - http://robotixx:6080 (ROS2 VNC)"
-log_info "    - http://robotixx:5001 (Web App)"
+log_info "    - http://robotixx:8000 (Web App)"
 log_info ""
 log_info "  IP-based URLs (alternative):"
 log_info "    - http://10.42.0.1:6080 (ROS2 VNC)"
-log_info "    - http://10.42.0.1:5001 (Web App)"
+log_info "    - http://10.42.0.1:8000 (Web App)"
 echo ""
 
 log_separator

@@ -13,6 +13,7 @@ def generate_launch_description():
         DeclareLaunchArgument('serial_number', default_value='0'),
         DeclareLaunchArgument('publish_tf', default_value='true'),
         DeclareLaunchArgument('publish_map_tf', default_value='true'),
+        DeclareLaunchArgument('enable_ipc', default_value='true'),
         DeclareLaunchArgument('params_file', default_value=PathJoinSubstitution([
             FindPackageShare('helmet_bringup'), 'config', 'zed_params.yaml',
         ])),
@@ -26,6 +27,7 @@ def generate_launch_description():
                 'serial_number': LaunchConfiguration('serial_number'),
                 'publish_tf': LaunchConfiguration('publish_tf'),
                 'publish_map_tf': LaunchConfiguration('publish_map_tf'),
+                'enable_ipc': LaunchConfiguration('enable_ipc'),
                 'ros_params_override_path': LaunchConfiguration('params_file'),
             }.items(),
         ),

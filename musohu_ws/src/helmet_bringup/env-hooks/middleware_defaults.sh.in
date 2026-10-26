@@ -1,0 +1,12 @@
+# Nominal middleware; explicit fallback overrides win.
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_zenoh_cpp}"
+# Retain asynchronous publication when explicitly selecting Fast DDS.
+export RMW_FASTRTPS_PUBLICATION_MODE="${RMW_FASTRTPS_PUBLICATION_MODE:-ASYNCHRONOUS}"
+
+# Stereolabs large-message settings, activated only when selecting Zenoh.
+# The boot service uses loopback port 7447; peers use ephemeral listeners.
+if [ "${RMW_IMPLEMENTATION:-}" = "rmw_zenoh_cpp" ]; then
+  export ZENOH_ROUTER_CHECK_ATTEMPTS="${ZENOH_ROUTER_CHECK_ATTEMPTS:-0}"
+  export RMW_ZENOH_BUFFER_POOL_MAX_SIZE_BYTES="${RMW_ZENOH_BUFFER_POOL_MAX_SIZE_BYTES:-33554432}"
+  export ZENOH_CONFIG_OVERRIDE="${ZENOH_CONFIG_OVERRIDE:-connect/endpoints=[\"tcp/127.0.0.1:7447\"];listen/endpoints=[\"tcp/127.0.0.1:0\"];scouting/multicast/enabled=false;transport/shared_memory/enabled=true;transport/link/tx/queue/congestion_control/drop/wait_before_drop=1000000}"
+fi

@@ -1,4 +1,4 @@
-# Pair with zed_stereo_no_depth.yaml; RGB is the left image, so no duplicate alias.
+# Full rig alternative: unrectified 1280x720-per-eye BGR8 uncompressed.
 topics:
 - /rslidar_points
 - /witmotion_imu/imu
@@ -7,10 +7,10 @@ topics:
 - /zed2i/zed_node/odom
 - /zed2i/zed_node/pose
 - /zed2i/zed_node/pose/status
-- /zed2i/zed_node/left/color/rect/image
-- /zed2i/zed_node/left/color/rect/camera_info
-- /zed2i/zed_node/right/color/rect/image
-- /zed2i/zed_node/right/color/rect/camera_info
+- /zed2i/zed_node/left/color/raw/image
+- /zed2i/zed_node/left/color/raw/camera_info
+- /zed2i/zed_node/right/color/raw/image
+- /zed2i/zed_node/right/color/raw/camera_info
 - /audio_stamped
 - /audio_info
 - /doa

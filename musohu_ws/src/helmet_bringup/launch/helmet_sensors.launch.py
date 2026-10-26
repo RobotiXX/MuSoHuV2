@@ -1,4 +1,5 @@
-"""Bring up independently selectable helmet sensors."""
+"""Bring up independently selectable helmet sensors and the service recorder."""
+import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -11,7 +12,8 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     actions = [DeclareLaunchArgument('zed_params_file', default_value=PathJoinSubstitution([
-        FindPackageShare('helmet_bringup'), 'config', 'zed_params.yaml']))]
+        FindPackageShare('helmet_bringup'), 'config', 'zed_params.yaml'])),
+        DeclareLaunchArgument('zed_enable_ipc', default_value='true')]
     for sensor in ('imu', 'lidar', 'zed', 'audio'):
         arg = 'launch_' + sensor
         actions.append(DeclareLaunchArgument(arg, default_value='true'))
@@ -19,10 +21,19 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(PathJoinSubstitution([
                 FindPackageShare('helmet_bringup'), 'launch', sensor + '.launch.py',
             ])), condition=IfCondition(LaunchConfiguration(arg)),
-            launch_arguments={'params_file': LaunchConfiguration('zed_params_file')}.items()
+            launch_arguments={'params_file': LaunchConfiguration('zed_params_file'),
+                              'enable_ipc': LaunchConfiguration('zed_enable_ipc')}.items()
             if sensor == 'zed' else (),
         ))
     actions.extend([
+        DeclareLaunchArgument('launch_recorder', default_value='true'),
+        DeclareLaunchArgument('bag_directory', default_value=os.environ.get(
+            'MUSOHU_BAG_DIR', os.path.expanduser('~/helmet_bags'))),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(PathJoinSubstitution([
+                FindPackageShare('musohu_bag_recorder'), 'launch', 'recorder.launch.py'])),
+            condition=IfCondition(LaunchConfiguration('launch_recorder')),
+            launch_arguments={'bag_directory': LaunchConfiguration('bag_directory')}.items()),
         DeclareLaunchArgument('launch_static_tf', default_value='true',
                               description='Publish finalized sensor extrinsics'),
         DeclareLaunchArgument('extrinsics_file', default_value=PathJoinSubstitution([
@@ -42,10 +53,5 @@ def generate_launch_description():
                  {key + '.enabled': ParameterValue(LaunchConfiguration('launch_' + sensor),
                                                    value_type=bool)
                   for key, sensor in [('witmotion', 'imu'), ('zed', 'zed'), ('audio', 'audio')]}]),
-        DeclareLaunchArgument('launch_actions', default_value='false',
-                              description='Publish legacy /action estimates from ZED odometry'),
-        Node(package='helmet_bringup', executable='action_generator.py',
-             name='action_generator', output='screen',
-             condition=IfCondition(LaunchConfiguration('launch_actions'))),
     ])
     return LaunchDescription(actions)

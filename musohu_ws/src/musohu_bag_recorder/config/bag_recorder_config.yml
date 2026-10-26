@@ -1,0 +1,23 @@
+# Read for each NEW session by the web client and native C++ recorder.
+# web-app/bag_recorder_config.yml links here for compatibility.
+# Edits do not alter an active bag. Topic selection remains in config.yml/UI.
+
+# rosbag2 storage plugin ID: sqlite3 writes .db3; mcap writes .mcap.
+# setup.sh installs both plugins. Other IDs require their storage plugin.
+# Humble's MCAP plugin defaults to uncompressed indexed chunks.
+storage: mcap
+
+# Empty means use the current ROS middleware's native format (CDR here).
+# Nonempty values require an installed rosbag2 serialization converter.
+serialization_format: ""
+
+# Bytes PER cache buffer: 500 MB. Double buffering can use up to ~1 GB.
+# 0 bypasses the cache and writes each message directly to storage.
+max_cache_size: 500000000
+
+# Bag-level compression: none, file, or message.
+# JPEG topics are already compressed independently of this setting.
+compression_mode: none
+compression_format: zstd       # Used only when compression_mode != none.
+compression_queue_size: 1     # Maximum queued files/messages for compression.
+compression_threads: 0        # 0 lets ROS use the number of CPU cores.

@@ -1,282 +1,223 @@
 # MuSoHu ROS 2 workspace
 
-ROS 2 Humble sensor bringup for the Jetson Orin Nano, ZED 2i, Helios H32F70,
-WT901 and ReSpeaker. `helmet_bringup` is the project-owned integration package.
-The main research/backlog decisions are in [../TODO.md](../TODO.md).
-See [VALIDATION.md](VALIDATION.md) for tested versions and remaining hardware checks.
-On 2026-10-14, native setup and all 16 package builds passed. After reboot,
-the complete rig passed short acquisition, web recording and playback checks,
-including ZED GEN_3, RGB/depth, IMUs, LiDAR and timestamped audio. Software PTP
-on the dedicated Ethernet link now drives native Helios timestamps. These
-checks do not establish drift, calibration or sustained outdoor performance.
-See [TIME_SYNC.md](TIME_SYNC.md), the [web workflow](../web-app/README.md) and
-[depth/power tests](POWER_BENCHMARK.md).
+ROS 2 Humble on Jetson Orin Nano: ZED 2i / SDK 5.5, Helios H32F70,
+WT901 and ReSpeaker. `helmet_bringup` owns integration; the native
+`musohu_bag_recorder` serves the [web app](../web-app/README.md) and CLI.
+Commands below run from the repository root. Research work is in [TODO.md](../TODO.md).
 
-## Reproducible source layout
+## Setup and build
 
-| Path | Source | Branch/base |
-| --- | --- | --- |
-| `src/zed-ros2-wrapper` | RobotiXX fork | `musohu-v2` from `main` |
-| `src/witmotion_IMU_ros` | RobotiXX Elettra fork | `musohu-v2` from `robotixx-ros2-humble` |
-| `src/audio_common` | RobotiXX fork | `musohu-v2` from `ros2` |
-| `src/respeaker_ros` | RobotiXX fork | `musohu-v2` from `master` (already ROS 2) |
-| `src/rslidar_sdk` | RobotiXX fork | `musohu-v2` from `main` (ROS 1/2) |
-| `src/rslidar_sdk/src/rs_driver` | RobotiXX nested fork | `musohu-v2` from `main` |
-| `src/rslidar_msg` | RobotiXX fork | `musohu-v2` from `master` (ROS 2 manifest) |
-| `src/zed-ros2-description` | Stereolabs upstream | pinned commit `22468247c1653d08a1e213809f3e9ce76291487d` |
-
-All sensor drivers now use individual forks; the transitional bundled workspace
-and source symlinks have been removed. Build `src` to discover 16 packages.
-`rs_driver` is built inside `rslidar_sdk`, not as a separate ROS package.
-The independent `~/ros2_musohu_ws` reference remains untouched.
-
-Submodule gitlinks pin exact source revisions; `branch = musohu-v2` does not
-make ordinary initialization advance to the latest branch tip.
+Ubuntu 22.04, JetPack/L4T 36.4 and the ROS 2 Humble apt repository are prerequisites.
+The setup helper installs dependencies, SDK 5.5, device rules and the local Zenoh
+router service, then builds sequentially with `--symlink-install`:
 
 ```bash
 git submodule update --init --recursive
-git submodule status --recursive
-```
-
-## Host and SDK setup
-
-Inspected 2026-10-12: Ubuntu 22.04.5, aarch64 Jetson Orin Nano Super 8 GB,
-L4T 36.4.7, CUDA 12.6, ROS 2 Humble. **ZED SDK 5.5.0 is now installed**,
-upgraded from 5.1.0. The 5.1 backup was removed at the maintainer's request.
-Use **SDK 5.5 for L4T 36.4**, matching the existing OS/CUDA; an OS/JetPack
-upgrade is not required. [Official SDK downloads and release notes](https://www.stereolabs.com/developers/release/5.5).
-
-In a fresh normal terminal, run the unified setup from the repository root:
-
-```bash
 ./musohu_ws/scripts/setup.sh
-# Or separate installation and compilation:
+# Separate dependency installation or rebuilding:
 ./musohu_ws/scripts/setup.sh --deps-only
 ./musohu_ws/scripts/setup.sh --build-only
 ```
 
-The helper initializes pinned submodules, installs apt and rosdep dependencies,
-provisions `pixel-ring==0.1.0` in the user's Python environment, installs device
-rules, retains SDK 5.5 if present and builds sequentially with `--symlink-install`.
-Use `--skip-sdk` or `--skip-udev` when those steps are managed separately.
-It requires Ubuntu 22.04, the ROS 2 Humble underlay and its apt repository;
-[configure those first on a clean host](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html).
-It does not flash JetPack, change CUDA, configure LiDAR networking or deploy
-the web service. Full clean-machine provisioning remains to be validated.
+Drivers are pinned RobotiXX submodules on `musohu-v2`: ZED derives from `main`,
+WitMotion from `robotixx-ros2-humble`, plus audio_common, respeaker_ros,
+rslidar_msg and rslidar_sdk (including nested rs_driver). Initialize recursively;
+do not update gitlinks during ordinary setup. `zed_description` is the native
+`ros-humble-zed-description` dependency. `nlohmann-json3-dev` provides the ZED
+wrapper's C++ JSON headers. Keep `~/ros2_musohu_ws` as a reference checkout only.
 
-`nlohmann-json3-dev` supplies header-only C++ JSON parsing and its CMake package.
-The pinned ZED wrapper calls `find_package(nlohmann_json REQUIRED)` and compiles
-JSON/GNSS replay helpers even with GNSS disabled. It is a build dependency;
-there is no JSON daemon to run. The setup helper installs it using
-`sudo apt-get install -y nlohmann-json3-dev`; the earlier temporary extracted
-headers are no longer the intended setup. The manifest's `nlohmann-json-dev`
-rosdep key resolves to this Ubuntu package.
-
-The ReSpeaker manifest's `python3-spidev` rosdep key is unresolved, so setup
-installs the Jammy apt package explicitly and skips only that rosdep key.
-Other Python/audio dependencies are checked, and `zed_msgs` is installed through
-rosdep; it must match wrapper 5.5.
-
-The SDK script verifies the installer, saves its SHA256 and backs up the old
-SDK before installation. It skips CUDA replacement, GMSL driver installation
-(the 2i is USB) and the Python API. SDK 5.5 may download/re-optimize models on
-first use; allow network access and warm up before recording experiments.
-
-## Build
-
-Use a fresh terminal; source the Humble underlay without the old workspace.
+For a manual build, use a fresh shell with only the Humble underlay:
 
 ```bash
 source /opt/ros/humble/setup.bash
 cd musohu_ws
-colcon list --base-paths src
-MAKEFLAGS='-j1 -l1' CMAKE_BUILD_PARALLEL_LEVEL=1 colcon build --base-paths src --symlink-install \
-  --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release \
+MAKEFLAGS='-j1 -l1' CMAKE_BUILD_PARALLEL_LEVEL=1 colcon build --base-paths src \
+  --symlink-install --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release \
   -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_DOCS=OFF
-source install/setup.bash
-ros2 launch helmet_bringup helmet_sensors.launch.py --show-args
 ```
 
-## Local ROS communication
-
-Sourcing this workspace sets `ROS_LOCALHOST_ONLY=1`: ROS topics, services,
-actions and discovery stay on the Jetson. The web app enforces the same setting
-for its sensor and recording children, and the systemd template includes it.
-The current Jetson user's `~/.bashrc` also sets it for new terminal sessions.
-In a terminal that was already open, source the workspace again or run:
+## Nominal middleware: Zenoh
 
 ```bash
-export ROS_LOCALHOST_ONLY=1
-ros2 daemon stop
-```
-
-Restart any ROS nodes started before the setting changed. Local CLI, RViz,
-recorders and sensor nodes must use the same ROS domain. Browser access to the
-web app over Wi-Fi still works; LiDAR UDP input and PTP on `eno1` continue
-normally. Run ROS inspection tools on the Jetson rather than another laptop.
-See the [Humble environment guide](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Configuring-ROS2-Environment.html#the-ros-localhost-only-variable).
-
-## Bringup
-
-```bash
-# Entire rig (requires devices and LiDAR networking):
+source /opt/ros/humble/setup.bash
+source musohu_ws/install/setup.bash
+./musohu_ws/scripts/zenoh.sh --check
 ros2 launch helmet_bringup helmet_sensors.launch.py
-# Individual sensors:
-ros2 launch helmet_bringup zed.launch.py
-ros2 launch helmet_bringup imu.launch.py device:=witImu baud:=115200
-ros2 launch helmet_bringup lidar.launch.py
-ros2 launch helmet_bringup audio.launch.py
-# Camera only through the combined entry point:
-ros2 launch helmet_bringup helmet_sensors.launch.py \
-  launch_imu:=false launch_lidar:=false launch_audio:=false
 ```
 
-The old `/action` estimator is opt-in with `launch_actions:=true`; it assumes
-the default ZED namespace. The combined launch also publishes the **finalized
-sensor extrinsics** from `zed2i_camera_link` to `rslidar` and `imu_link`,
-confirmed accurate and final by the maintainer on 2026-10-21 in commit
-`2c33979`. Canonical values are in `config/sensor_extrinsics.yaml`; the IMU
-frame origin is the housing center. Use these values for the current rig.
-Set `launch_static_tf:=false` to disable publication, or use
-`extrinsics_file:=/absolute/path/to/extrinsics.yaml` for a different hardware geometry.
-The WT901 port uses Qt's device name (`witImu`, not a copied `/dev/ttyUSB1`
-assumption); `baud` must match sensor firmware.
-The pinned WitMotion fork includes a shutdown fix: ROS shutdown is not called recursively,
-the executor thread is joined, and publishers/services are released before
-process teardown. Its regression test runs without attached hardware:
+Sourcing selects `rmw_zenoh_cpp` and localhost-only ROS communication. Setup
+installs `musohu-zenoh.service`; `zenoh.sh --router` is a foreground alternative
+when that service is stopped. Peers/router use loopback, SHM, a 32 MiB pool,
+a 1 s congestion timeout and disabled multicast. Browser HTTP and native
+LiDAR UDP/PTP remain available. Web control RPCs use loopback TCP to avoid a
+Humble SHM response issue; sensor/recorder bulk data retain SHM.
+
+In short stationary trials, tuned Zenoh reduced recorder CPU about **34%** and
+system CPU **5 percentage points**, averaging **28.08 versus 26.55 saved stereo
+pairs/s** with asynchronous Fast DDS. The median gap was smaller (28.60 versus
+28.25); shared-memory mappings increased reported RSS. These are observations,
+not a sustained 30 Hz guarantee. RELIABLE KEEP_LAST and ZED C++ IPC stay enabled.
+
+### Use Fast DDS if needed
+
+Stop recording and sensors first. All communicating nodes/CLI tools need the
+same middleware and ROS domain; stop/relaunch them when switching:
 
 ```bash
-python3 -m unittest discover -s src/witmotion_IMU_ros/test -v
-python3 -m unittest discover -s src/respeaker_ros/test -p test_sensor_output.py -v
-python3 -m unittest discover -s src/rslidar_sdk/test -p test_shutdown.py -v
+ros2 daemon stop
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS
+source musohu_ws/install/setup.bash
+ros2 launch helmet_bringup helmet_sensors.launch.py
 ```
 
-ZED uses `ros_params_override_path`, retaining upstream camera/common defaults.
-The profile selects **GEN_3** with IMU fusion, area memory/loop closure and
-gravity alignment. Full 3D tracking suits a moving helmet; floor alignment,
-2D mode and static-camera mode are disabled. `PREFER_GPU` selects SDK 5.5's
-faster tracking option. The nominal profile captures HD720 at 30 Hz, requests
-30 Hz image publication, and records left/right **JPEG compressed images**
-plus both calibrations. Dense depth is disabled (`NONE`); 24-bit BGR output
-is enabled. Both calibrated and raw ZED IMUs are recorded independently at
-about 200 Hz (`sensors_image_sync: false`). Image sync would couple IMU output
-to image publication and can suppress it without image subscribers. Requested
-image rate is a cap, not a performance guarantee: the full-rig JPEG pilot
-recorded about 16.6 Hz per image, while odometry remained about 29.4 Hz.
-[Tracking modes](https://docs.stereolabs.com/docs/development/zed-sdk/modules/positional-tracking/modes),
-[ROS tracking parameters](https://docs.stereolabs.com/docs/integrations/ros-2/positional-tracking).
+For the deployed web app, a terminal export is insufficient. With hardware
+stopped, use `sudo systemctl edit musohu-web.service` and add:
 
-Odometry is kept continuous across loop closures; corrected poses use `map`.
-`/zed2i/zed_node/odom` is `nav_msgs/Odometry`: its pose is relative to `odom`,
-with twist, covariance and a camera child frame. `/zed2i/zed_node/pose` is
-`geometry_msgs/PoseStamped`: the camera pose relative to `map`, including
-area-memory/loop-closure corrections. Thus pose can jump after relocalization
-while odometry stays continuous with `reset_odom_with_loop_closure: false`.
-The two poses need not be numerically equal. Record both to compare local
-motion against globally corrected trajectories; `map→odom` links their frames.
-When integrating another estimator, disable ZED TF publication as appropriate
-with `publish_tf:=false publish_map_tf:=false` in the individual ZED launch.
-Do not create two publishers for the same TF edge.
+```ini
+[Service]
+Environment="RMW_IMPLEMENTATION=rmw_fastrtps_cpp"
+Environment="RMW_FASTRTPS_PUBLICATION_MODE=ASYNCHRONOUS"
+```
 
-The nominal workflow runs no dense depth. GEN_3 still computes VIO; disabling
-depth does not disable tracking. Point cloud, mapping, body and object
-detection remain disabled. `imu/data` carries SDK calibrated measurements
-and orientation; `imu/data_raw` carries uncalibrated acceleration/gyro without
-an orientation estimate. JPEG is lossy; the installed plugin used quality 95
-on both cameras, captured in recording metadata. Validate image quality for
-future offline depth/odometry processing.
+Then run `sudo systemctl daemon-reload` and `sudo systemctl restart musohu-web.service`.
+To return to nominal, set that override and terminal `RMW_IMPLEMENTATION` to
+`rmw_zenoh_cpp`, source the workspace and relaunch. Keep other service overrides.
 
-The old **15 Hz uncompressed stereo** profile is retained for comparison
-with the 2026-10-15 benchmark. It is separate from the nominal 30 Hz JPEG
-workflow. From `musohu_ws`, after sourcing the workspace:
+### Read a Zenoh recording with DDS
+
+ROS bags contain CDR messages, not a middleware-specific payload format.
+Humble Zenoh records `avoid_ros_namespace_conventions: true` in offered QoS;
+Fast DDS playback needs that flag false. Make a verified copy:
 
 ```bash
-ros2 launch helmet_bringup helmet_sensors.launch.py \
-  zed_params_file:="$(ros2 pkg prefix helmet_bringup)/share/helmet_bringup/config/zed_stereo_no_depth.yaml"
-# In another sourced terminal:
-./scripts/record-evaluation.sh --label stereo_no_depth \
-  --topics src/helmet_bringup/config/recording_stereo_no_depth.yaml
+source /opt/ros/humble/setup.bash
+source musohu_ws/install/setup.bash
+python3 musohu_ws/scripts/convert-bag-for-dds.py /path/to/source_bag /path/to/new_dds_bag
+RMW_IMPLEMENTATION=rmw_fastrtps_cpp ROS_LOCALHOST_ONLY=1 \
+  ros2 bag play /path/to/new_dds_bag
 ```
 
-This records `/zed2i/zed_node/{left,right}/color/rect/{image,camera_info}`
-alongside the other sensors and VIO, at a requested 15 Hz image rate. The
-`/rgb/` alias is the left image and is omitted to avoid duplication. Camera
-calibration is retained for offline stereo processing. Disabling dense depth
-does not disable GEN_3's own visual/inertial computation. See the measured
-[power comparison](POWER_BENCHMARK.md). Web topic selection alone does not
-change camera acquisition parameters; launch this profile before selecting
-its topics in the web recorder.
+The helper normalizes every topic's naming flag, preserving types, other QoS
+(including transient-local), serialized bytes and receipt timestamps. It verifies
+the copy and saves `dds_conversion.json`; the original is untouched. Output is
+**uncompressed MCAP**, so allow sufficient space even for a compressed input.
+Play separately from live hardware. No Zenoh router or sensors are needed to convert.
 
-## Sensor rate health
+## Sensors and stereo recording
 
-Combined bringup starts `musohu_sensor_health`; disable it explicitly with
-`launch_health_monitor:=false` if another monitor is already running. It counts
-`/witmotion_imu/imu` at 200 Hz, `/zed2i/zed_node/odom` at 30 Hz and
-`/audio_stamped` at 15.625 messages/s. Audio is 16 kHz mono PCM16 in
-1,024-sample chunks, about 2 KB per message; VAD/DOA are event-driven and
-`/audio_info` is latched, so none provides a suitable capture-rate signal.
-LiDAR point-cloud rate is intentionally skipped. Disabled launch sensors
-are marked disabled, not missing.
+Default: **15 W**, SDK depth **NONE**, GEN_3 **PREFER_GPU**, capture/compute/publish
+**60/30/30**, packed unrectified **BGR8 uncompressed**, **1280×720 per eye**.
+Both ZED IMUs run independently near 200 Hz (`sensors_image_sync: false`).
+Retain both camera calibrations and all IMU streams for offline depth/LIO.
 
-Settings are in `config/sensor_health.yaml`: a 10-second rolling receive-rate
-window, 5-second warmup, 2-second missing-data timeout and 1 Hz reports.
-Within ±10% is healthy, with a ±5% target and a caution note between those
-bounds. Both slow and unexpectedly fast streams are flagged outside ±10%.
-Rates use monotonic receive time, independent of UTC adjustments. Summaries
-publish on `/diagnostics` and atomically to
-`~/.local/state/musohu/sensor_health.json`; `MUSOHU_HEALTH_FILE` overrides the
-path. The web UI polls once per second and rejects snapshots older than four
-seconds, from another boot or another ROS domain. No image/cloud subscriptions
-are created by this monitor. These checks establish stream throughput, not
-image recording rate, tracking accuracy, synchronization or calibration.
+The Full rig manifest records `/zed2i/zed_node/stereo/color/raw/image`
+(`sensor_msgs/Image`, 2560×720). Split columns 0–1279 / 1280–2559 into left/right;
+both halves have one acquisition stamp. Use the respective optical frames and
+`left/color/raw/camera_info` / `right/color/raw/camera_info` under the same node.
+Packing keeps each pair together; it neither halves pixel bytes nor prevents
+whole-frame drops. The Separate RGB preset remains available.
 
-## Evaluation recording and hardware checks
+The initial BGR8 comparison saved **26.50 pairs/s** packed/unrectified/uncompressed
+versus **16.20** separate/rectified/JPEG95; several settings changed together.
+Later nominal recordings reached about **28.5**. BGR8 carries 25% fewer bytes
+than BGRA8. PREFER_GPU averaged about 7% more saved pairs and 11% less ZED CPU
+than PREFER_CPU, using more GPU; 25 W provided no consistent throughput benefit.
+Assess saved images after excluding startup; odometry health is not an image-rate check.
+
+| Configuration | File under `src/helmet_bringup/config/` |
+| --- | --- |
+| Camera/tracking | `zed_params.yaml` |
+| WT901, 115200 baud / approximately 200 Hz | `imu_params.yaml` |
+| LiDAR, native XYZIRT point time/ring | `lidar_params.yaml` |
+| Final measured transforms | `sensor_extrinsics.yaml` |
+| Recording topics | `recording_multimodal.yaml`, `recording_multimodal_separate.yaml`, `recording_topics.yaml` |
+| Lightweight rate health | `sensor_health.yaml` |
+
+Individual launches: `zed.launch.py`, `imu.launch.py`, `lidar.launch.py`,
+`audio.launch.py` in `helmet_bringup`. Combined launch supports
+`launch_zed`, `launch_imu`, `launch_lidar`, `launch_audio`, `launch_static_tf`
+and `launch_recorder` switches. Final current-rig extrinsics are accepted;
+use one TF publisher per edge. WT901 uses Qt port name `witImu`.
+ReSpeaker and WT901 settings/calibration are accepted; preserve them.
+
+ZED `odom` is continuous local pose plus velocity/covariance in `odom`;
+`pose` is camera pose in `map`, corrected by loop closure. Record both.
+Fused `imu/data` includes orientation/calibrated measurements; `imu/data_raw`
+contains uncalibrated acceleration/gyro. Dense depth stays disabled.
+
+## Session clocks
+
+With sensors and recording stopped, open **http://10.42.0.1:8000/** on the
+hotspot (or the Jetson LAN address). Offline, use **Sync from this phone**;
+online, use **Use internet time** and wait for a ready reference. After each
+battery swap/reboot, synchronize again before starting hardware. Never step
+the host clock during sensor operation or recording.
+
+Phone UTC or NTP owns Jetson system time. `musohu-ptp.service` serves it over
+`eno1` using software UDPv4/E2E PTP, domain 0; there is no PHC or phc2sys.
+Jetson `192.168.1.102/24`, Helios `192.168.1.200`, LiDAR `PTP-E2E-L4`.
+Phone sync disables NTP, checks native LiDAR epoch and stores a boot-scoped
+reference (24 h expiry). PTP reads the adjusted system clock without a restart.
+Startup fails closed without a ready reference; `/diagnostics` monitors clock state.
 
 ```bash
-./scripts/record-evaluation.sh --label urban_loop_01
-# Stop with Ctrl-C, then inspect the completed bag:
-ros2 bag info ~/helmet_bags/<bag-name>
+./musohu_ws/scripts/ptp.sh --install --interface eno1  # provisioning, uses sudo
+./musohu_ws/scripts/ptp.sh --status --interface eno1
+python3 musohu_ws/scripts/lidar-time.py
 ```
 
-The helper records the manifest in `src/helmet_bringup/config/recording_topics.yaml`
-and writes adjacent request metadata containing repository/submodule versions
-and SDK state. Supply `--topics` and `--output` to change the manifest/output.
-This command-line helper retains its lightweight request metadata. For recorder-
-confirmed state, editable topic presets and complete final session metadata,
-use the [web recording workflow](../web-app/README.md).
+LiDAR uses native PTP acquisition time; ZED uses the SDK's host-clock mapping;
+WT901 uses host receive time. `/audio_stamped` maps PortAudio ADC time to host
+UTC with a receive-time fallback. These USB sensors are not hardware PTP endpoints.
 
-Verify `/rslidar_points`, `/witmotion_imu/imu`, `/zed2i/zed_node/imu/data`,
-`/zed2i/zed_node/imu/data_raw`, `/zed2i/zed_node/odom`, `/zed2i/zed_node/pose`,
-`/tf`, `/tf_static` and `/diagnostics`. Check topic types, rates, frame IDs,
-timestamps and effective GEN_3 parameters. Check PointCloud2 fields for
-per-point time/ring before selecting LIO; the fork now defaults to XYZIRT and
-publishes `ring` and absolute `timestamp` fields. LiDAR now uses its native
-PTP-disciplined clock; [clock setup and startup checks](TIME_SYNC.md) are required. Polling/publication configuration is not a measured sensor rate.
+## Recording and archival
 
-Keep calibration, clock synchronization and route conditions constant between
-IMU comparisons. Verify recording message counts and playback before using a
-bag for drift comparisons. Observe the running rig with the bounded probe:
+Use the web Full rig preset, or launch the stack and record through its native service:
 
 ```bash
-python3 ./scripts/validate-sensors.py --duration 30 --output /tmp/rig-check.json
-# Isolate sensors when diagnosing a failure:
-python3 ./scripts/validate-sensors.py --sensors imu lidar audio --duration 20 \
-  --output /tmp/noncamera-check.json
+./musohu_ws/scripts/record-evaluation.sh --label urban_loop_01
+# Ctrl-C finalizes; --duration 30 stops after confirmed recording.
+ros2 bag info ~/helmet_bags/<session>
 ```
 
-The probe reports observed rates, timestamps, acceleration, PCM audio, image
-layout, LiDAR point fields and diagnostic statuses. It refuses to overwrite
-reports and exits nonzero for missing streams or nonincreasing timestamps.
-This short acquisition check does not validate calibration or trajectory drift.
-This checkout's web app targets the new workspace. The existing deployed
-service still uses its separate old checkout; deployment preparation does not
-replace it. New full recordings use `/audio_stamped` and `/audio_info`; legacy
-headerless `/audio` remains available for existing callers.
+The CLI defaults to the odometry-evaluation manifest; pass
+`--topics musohu_ws/src/helmet_bringup/config/recording_multimodal.yaml` for Full rig.
+Canonical writer settings are in
+`src/musohu_bag_recorder/config/bag_recorder_config.yml` (also linked from the web app):
+**MCAP, no compression, 500 MB per cache buffer**. MCAP reduced recorder CPU
+about 15% versus SQLite3 in the fresh-launch comparison; file-size overhead was similar.
+Automatic Zstd rewriting is **disabled**. Opt in per new session with
+`ros.mcap_postprocess.enabled: true` in `web-app/config.yml`; no restart is needed.
+When enabled, verified rewriting finishes before the next recording can start.
 
-For the observed USB protocol failure, `./scripts/recover-zed-usb.sh --check`
-identifies the ZED video device's parent USB 3 hub. With sensors stopped,
-`--reset` uses sudo to rebind that hub and refuses if other USB devices are
-present beneath it. This is a recovery attempt; it does not diagnose the root
-cause or reboot the host. Preserve the kernel log and compare against
-[Stereolabs USB troubleshooting](https://support.stereolabs.com/articles/2190934729-how-to-fix-usb-3-0-bandwidth-and-connection-issues)
-if video still does not enumerate.
+Approximate whole-bag storage, from a 120.33 s stationary recording without
+ReSpeaker (decimal GB; scene, topic selection and saved rate affect size):
+
+| Representation | GB per recorded minute | Image fidelity |
+| --- | ---: | --- |
+| Raw BGR8 / uncompressed MCAP | 10.38 | Original |
+| Raw BGR8 + internal Zstd | 7.13 | Lossless |
+| PNG rewrite + internal Zstd | 5.10 | Pixel-identical |
+| JPEG95 / 4:2:0 rewrite + internal Zstd | 1.58 | Lossy; depth accuracy unvalidated |
+
+PNG/JPEG figures are retained archival estimates; image-rewrite experiment
+scripts were retired. Original bags and external experiment artifacts are preserved.
+
+## Health and troubleshooting
+
+The 1 Hz web health panel checks lightweight WT901/ZED odom/audio rates with
+10 s windows, 5 s warmup, a ±5% target and ±10% healthy limit. It does not
+subscribe to images/clouds or validate tracking accuracy. Settings live in
+`sensor_health.yaml`; snapshots are in `~/.local/state/musohu/sensor_health.json`.
+
+```bash
+python3 musohu_ws/scripts/validate-sensors.py --duration 30 --output /tmp/rig-check.json
+./musohu_ws/scripts/recover-zed-usb.sh --check
+```
+
+The first checks bounded sensor samples; USB recovery `--reset` requires stopped
+sensors and sudo, and refuses a hub shared with unrelated devices. For recorder
+services and dummy development, see the [native recorder](src/musohu_bag_recorder/README.md)
+and [web app](../web-app/README.md). No hardware benchmark or clock retuning is
+part of ordinary setup.

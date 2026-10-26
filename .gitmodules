@@ -6,9 +6,6 @@
 	path = musohu_ws/src/witmotion_IMU_ros
 	url = https://github.com/RobotiXX/witmotion_IMU_ros.git
 	branch = musohu-v2
-[submodule "musohu_ws/src/zed-ros2-description"]
-	path = musohu_ws/src/zed-ros2-description
-	url = https://github.com/stereolabs/zed-ros2-description.git
 [submodule "musohu_ws/src/audio_common"]
 	path = musohu_ws/src/audio_common
 	url = https://github.com/RobotiXX/audio_common.git

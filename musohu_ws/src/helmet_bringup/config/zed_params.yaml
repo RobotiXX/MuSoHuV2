@@ -4,15 +4,16 @@
   ros__parameters:
     general:
       grab_resolution: HD720
-      grab_frame_rate: 30
+      grab_frame_rate: 60
       pub_frame_rate: 30.0
-      enable_image_validity_check: 1
+      grab_compute_capping_fps: 30.0
+      enable_image_validity_check: 0
       sdk_timestamp_clock: SYSTEM_CLOCK
     video:
       publish_rgb: false
       publish_left_right: true
-      publish_raw: false
-      publish_stereo: false
+      publish_raw: true
+      publish_stereo: true
       enable_24bit_output: true
     depth:
       depth_mode: NONE

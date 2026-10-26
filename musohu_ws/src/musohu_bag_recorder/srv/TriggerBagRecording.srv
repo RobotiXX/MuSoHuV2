@@ -1,0 +1,17 @@
+# Same session is idempotent; another active owner is rejected.
+string session_id
+string reason
+# An override must stay inside output_directory.
+string bag_uri
+string[] topics
+# Empty loads config_file; otherwise a validated per-session settings snapshot.
+string settings_json
+string context_json
+# Zero is manual ownership; web clients renew a steady-clock lease using state calls.
+float64 owner_timeout_sec
+---
+bool success
+bool recording
+bool started_new_bag
+string bag_uri
+string message

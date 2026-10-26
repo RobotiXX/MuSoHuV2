@@ -98,7 +98,7 @@
     </script>
     <script>
         const pending = new Set();
-        const activeStates = new Set(['starting', 'recording', 'running', 'stopping']);
+        const activeStates = new Set(['starting', 'recording', 'running', 'stopping', 'compressing']);
         let changingTime = false;
         function renderSensorHealth(state) {
             document.getElementById('sensor-health-summary').textContent =
@@ -206,7 +206,7 @@
                 state.className = 'status ' + (activeStates.has(script.status) ? 'running' : 'stopped');
                 state.dataset.state = script.status;
                 const labels = {starting:'Starting — waiting for recorder', recording:'Recording',
-                    running:'Sensor launch running', stopping:'Stopping — saving bag', stopped:'Stopped', failed:'Failed'};
+                    running:'Sensor launch running', stopping:'Stopping — saving bag', compressing:'Compressing — verifying MCAP', stopped:'Stopped', failed:'Failed'};
                 state.textContent = labels[script.status] || script.status;
                 card.append(title, state);
                 if (script.error) {
@@ -232,13 +232,23 @@
                         card.append(missing);
                     }
                 }
+                if (script.mcap_postprocess) {
+                    const post = document.createElement('p');
+                    const result = script.mcap_postprocess;
+                    post.textContent = result.status === 'completed'
+                        ? `Lossless Zstd: ${(result.compressed_bytes / 1e9).toFixed(2)} GB; saved ${(result.saved_bytes / 1e9).toFixed(2)} GB in ${result.elapsed_seconds.toFixed(1)} s.`
+                        : result.status === 'failed' ? 'Compression failed; recording remains usable: ' + result.error
+                        : result.phase === 'verifying' ? 'Checking every recorded message before replacing the original…'
+                        : result.status === 'running' ? 'Compressing finalized MCAP…' : '';
+                    card.append(post);
+                }
                 const active = activeStates.has(script.status);
                 const button = document.createElement('button');
                 button.dataset.script = id;
                 button.dataset.action = active ? 'stop' : 'start';
                 button.className = active ? 'btn-stop' : 'btn-start';
-                button.textContent = script.status === 'stopping' ? 'Saving…' : active ? 'Stop' : 'Start';
-                button.disabled = pending.has(id) || script.status === 'stopping' || changingTime;
+                button.textContent = script.status === 'compressing' ? 'Compressing…' : script.status === 'stopping' ? 'Saving…' : active ? 'Stop' : 'Start';
+                button.disabled = pending.has(id) || ['stopping', 'compressing'].includes(script.status) || changingTime;
                 button.addEventListener('click', () => toggleScript(id, active));
                 card.append(button);
                 container.append(card);

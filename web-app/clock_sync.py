@@ -22,10 +22,10 @@ def active_sensor_processes():
         except (OSError, ProcessLookupError):
             continue
         names={Path(a).name for a in argv[:3]}
-        if (names & {'witmotion_ros_node','rslidar_sdk_node','respeaker_node','recording_worker.py'}
+        if (names & {'witmotion_ros_node','rslidar_sdk_node','respeaker_node','recording_worker.py','bag_recorder_node'}
                 or 'component_container_isolated' in names and any('zed' in a for a in argv)
                 or len(argv)>3 and Path(argv[1]).name=='ros2' and (argv[2:4]==['bag','record']
-                    or argv[2]=='launch' and argv[3] in {'helmet_bringup','zed_wrapper','rslidar_sdk','respeaker_ros','witmotion_ros'})):
+                    or argv[2]=='launch' and argv[3] in {'helmet_bringup','musohu_bag_recorder','zed_wrapper','rslidar_sdk','respeaker_ros','witmotion_ros'})):
             found.append(proc.name)
     return found
 

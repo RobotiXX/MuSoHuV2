@@ -27,7 +27,8 @@ Run as your normal user in a fresh terminal. Dependency installation uses sudo;
 do not run the entire script as root. Requires Ubuntu 22.04 and an installed
 ROS 2 Humble underlay with its apt repository configured. For a clean host see
 https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html first.
-JetPack/CUDA, network addresses, firmware and services are not reconfigured.
+JetPack/CUDA, network addresses and firmware are not reconfigured.
+Dependencies include the verified MCAP CLI and a loopback-only Zenoh boot service.
 The SDK helper installs 5.5 only if missing; it keeps the current CUDA/JetPack.
 
 Builds always use --symlink-install, sequential packages and one compiler job.
@@ -85,13 +86,16 @@ git submodule update --init --recursive
 # Native, ROS, SDK and Python dependencies.
 #***********************************************************************
 if [[ "$setup_mode" != build-only ]]; then
-    sudo -v
+    if ! sudo -n true 2>/dev/null; then sudo -v; fi
     sudo apt-get update
     sudo apt-get install -y build-essential cmake git curl zstd pkg-config \
         python3-colcon-common-extensions python3-rosdep python3-pip python3-venv \
         python3-numpy python3-yaml python3-usb python3-spidev python3-pyaudio \
         portaudio19-dev libusb-1.0-0-dev nlohmann-json3-dev linuxptp ethtool \
-        ros-humble-ros-base ros-humble-rosbag2 ros-humble-rosbag2-storage-default-plugins
+        ros-humble-ros-base ros-humble-rosbag2 ros-humble-rosbag2-storage-default-plugins \
+        ros-humble-rosbag2-storage-mcap ros-humble-rmw-zenoh-cpp ros-humble-zed-description
+    "$setup_script_dir/mcap-cli.sh" --install
+    "$setup_script_dir/zenoh.sh" --install
     [[ -f /etc/ros/rosdep/sources.list.d/20-default.list ]] || sudo rosdep init
     rosdep update --rosdistro humble
     # Jammy supplies spidev via apt above; the driver's legacy key is unresolved.

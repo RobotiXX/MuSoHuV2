@@ -235,11 +235,14 @@ sudo bash scripts/utils/manage_web_service.sh start
 
 ```bash
 # Start hotspot
-bash scripts/hotspot/start-hotspot.sh
+sudo bash scripts/hotspot/start-hotspot.sh
 
-# Setup DNS
-sudo bash scripts/hotspot/setup-hotspot-dns.sh
+# Install/enable at boot without switching the current Wi-Fi connection
+./scripts/hotspot/setup-hotspot-service.sh
 ```
+
+Open http://10.42.0.1:8000/ on the hotspot. NetworkManager shared mode provides
+DHCP/DNS; the separate legacy dnsmasq setup is not needed for this workflow.
 
 ---
 

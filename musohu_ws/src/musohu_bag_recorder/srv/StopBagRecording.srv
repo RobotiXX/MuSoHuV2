@@ -1,0 +1,7 @@
+string session_id
+---
+bool success
+bool recording
+bool finalized
+string bag_uri
+string message

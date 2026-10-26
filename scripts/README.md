@@ -85,7 +85,11 @@ Management and helper utilities:
 - `logging_config.sh` - Shared logging functions
 
 ### Hotspot (`hotspot/`)
-WiFi hotspot setup and configuration.
+WiFi hotspot setup and configuration. Install the boot service from this
+checkout with `./scripts/hotspot/setup-hotspot-service.sh` (no immediate WiFi
+switch). To activate it, run `sudo systemctl restart hotspot.service`, then
+open **http://10.42.0.1:8000/**. NetworkManager shared mode supplies DHCP/DNS;
+the separate legacy dnsmasq setup scripts are not required.
 
 ### UDEV Rules (`udev_rules/`)
 Device rules for hardware permissions.
@@ -102,3 +106,10 @@ When adding new scripts:
 3. Use the logging system from `utils/logging_config.sh`
 4. Place in the appropriate directory based on purpose
 5. Update this README and relevant documentation
+
+The nominal ROS middleware is tuned Zenoh. `musohu_ws/scripts/zenoh.sh --install`
+enables its loopback-only boot router; `--check` checks readiness and `--router`
+is a foreground alternative. Setup also installs the pinned, checksum-verified
+MCAP CLI using `musohu_ws/scripts/mcap-cli.sh --install`. The web app optionally
+runs lossless Zstd after native writer finalization; toggle
+`ros.mcap_postprocess.enabled` in `web-app/config.yml` for the next session.

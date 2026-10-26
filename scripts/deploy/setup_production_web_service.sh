@@ -44,7 +44,22 @@ trap 'log_error "Web setup failed at line $LINENO; see $LOG_FILE"' ERR
 [[ -f "$web_setup_root/musohu_ws/install/setup.bash" ]] || {
     log_error 'Build musohu_ws before preparing the web service.'; exit 1;
 }
-[[ -x "$web_setup_app/venv/bin/python" ]] || python3 -m venv "$web_setup_app/venv"
+# Refuse to restart a web-owned sensor/recording/postprocessing operation.
+if [[ "$web_setup_mode" == install ]]; then
+    /usr/bin/python3 - "$web_setup_port" <<'PY_IDLE'
+import json,sys,urllib.request
+try:
+    with urllib.request.urlopen('http://127.0.0.1:'+sys.argv[1]+'/api/scripts',timeout=3) as response:
+        states=json.load(response)
+except OSError:
+    states={}
+if any(s.get('status') in ('starting','recording','running','stopping','compressing') for s in states.values()):
+    raise SystemExit('Stop recording, compression and sensors before installing the web service.')
+PY_IDLE
+fi
+# Reapply venv isolation even when reusing an older system-site-packages venv.
+# ROS children use system Python separately; the API needs only its own deps.
+python3 -m venv "$web_setup_app/venv"
 "$web_setup_app/venv/bin/python" -m pip install -r "$web_setup_app/requirements.txt"
 mkdir -p "$web_setup_app/logs" "$web_setup_app/deploy"
 "$web_setup_app/venv/bin/python" - "$web_setup_dir" "$web_setup_root" "$web_setup_port" <<'PY'
@@ -63,6 +78,8 @@ PY
 systemd-analyze verify "$web_setup_app/deploy/musohu-web.service"
 log_success "Prepared service: $web_setup_app/deploy/musohu-web.service"
 if [[ "$web_setup_mode" == install ]]; then
+    "$web_setup_root/musohu_ws/scripts/mcap-cli.sh" --install
+    "$web_setup_root/musohu_ws/scripts/zenoh.sh" --install
     "$web_setup_root/scripts/setup/setup_time_sync_permissions.sh"
     sudo install -m 0644 "$web_setup_app/deploy/musohu-web.service" /etc/systemd/system/musohu-web.service
     sudo systemctl daemon-reload

@@ -1,5 +1,5 @@
 # MuSoHu: Multi-Modal Social Human Navigation (v2)
-Last updated: 2026-10-14
+Last updated: 2026-10-26
 
 Multi-Modal Social Human Navigation Dataset - A robotics research platform developed at George Mason University for collecting data on human-robot interactions in social navigation contexts.
 
@@ -21,9 +21,9 @@ This project collects social human navigation data in natural human-inhabited pu
 The wearable data collection device includes:
 
 - **3D LiDAR** - Robosense Helios 32 (360° environmental scanning)
-- **Stereo & Depth Camera** - Stereolabs ZED 2i (visual perception and depth sensing)
+- **Stereo Camera** - Stereolabs ZED 2i (record colour stereo for offline depth)
 - **IMU** - Inertial Measurement Unit (motion tracking)
-- **Odometry/Actions** - Online processing for human navigation behavior extraction
+- **Odometry** - ZED visual-inertial pose and motion tracking
 - **Microphone Array** - Seeed Studio ReSpeaker Mic Array (spatial audio capture)
 
 ## Documentation
@@ -33,8 +33,8 @@ For complete documentation, setup instructions, and production deployment guides
 - **[ROS 2 workspace](musohu_ws/README.md)** - Sensor sources, SDK setup, build, bringup and evaluation recording
 - **[Current work plan](TODO.md)** - Agreed ROS, odometry/IMU, recording and mechanical tasks
 - **[Contributor instructions](AGENTS.md)** - Project context and working conventions
-- **[Time synchronization](musohu_ws/TIME_SYNC.md)** - Offline phone/online NTP, software PTP and timestamp limits
-- **[Depth/power benchmark](musohu_ws/POWER_BENCHMARK.md)** - Recording power, neural depth modes and measurement scope
+- **[Session clocks](musohu_ws/README.md#session-clocks)** - Offline phone/online NTP and LiDAR PTP
+- **[Stereo capture](musohu_ws/README.md#sensors-and-stereo-recording)** - Nominal packed images, calibration and offline depth
 - **[Web recording](web-app/README.md)** - Recording presets, session metadata and dummy publishers
 - **[Service deployment](scripts/deploy/README.md)** - Prepare and migrate the systemd service
 

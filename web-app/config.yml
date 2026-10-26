@@ -74,8 +74,15 @@ ros:
   topic_manifest: ../musohu_ws/src/helmet_bringup/config/recording_multimodal.yaml
   topic_profiles:
     Full rig: ../musohu_ws/src/helmet_bringup/config/recording_multimodal.yaml
+    Separate RGB: ../musohu_ws/src/helmet_bringup/config/recording_multimodal_separate.yaml
     Odometry evaluation: ../musohu_ws/src/helmet_bringup/config/recording_topics.yaml
     Dummy sensors: ../musohu_ws/src/helmet_bringup/config/recording_dummy.yaml
   process_log_directory: logs
   health_state_file: ~/.local/state/musohu/sensor_health.json
   stop_timeout_seconds: 30
+  # Optional after native writer finalization; read again for each new session.
+  # Lossless internal MCAP Zstd; verify all records, then atomically replace.
+  mcap_postprocess:
+    enabled: false
+    executable: /usr/local/bin/mcap
+    timeout_seconds: 1800

@@ -48,7 +48,10 @@ if $permission_power; then
     done
     printf '%s ALL=(root) NOPASSWD: /usr/sbin/nvpmodel -m 0, /usr/sbin/nvpmodel -m 1, /usr/sbin/nvpmodel -m 3\n' "$permission_user" >> "$permission_file"
 fi
-sudo -v
+# sudo -v may require a password even when commands are NOPASSWD-authorized.
+if ! sudo -n true 2>/dev/null; then
+    sudo -v
+fi
 sudo visudo -cf "$permission_file"
 sudo install -m 0440 "$permission_file" /etc/sudoers.d/musohu-v2-controls
 log_success 'Installed narrow permissions; time, network and power mode were not changed.'

@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 
 # Keep ROS DDS discovery and traffic on this host when sourcing the workspace.
 ament_environment_hooks("env-hooks/ros_localhost_only.dsv.in")
+ament_environment_hooks("env-hooks/middleware_defaults.sh.in")
 
 # Install launch files
 install(DIRECTORY
@@ -19,7 +20,6 @@ install(DIRECTORY
 )
 
 install(PROGRAMS
-  scripts/action_generator.py
   scripts/check_lidar_clock.py
   scripts/clock_reference.py
   scripts/time_sync_monitor.py

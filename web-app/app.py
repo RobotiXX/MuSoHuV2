@@ -94,6 +94,7 @@ def get_default_config():
 
 # Load configuration
 config = load_config()
+config['_config_path'] = os.environ.get('MUSOHU_CONFIG', os.path.join(BASE_DIR, 'config.yml'))
 
 # Initialize file discovery service
 file_discovery = FileDiscoveryService(config)
@@ -760,9 +761,11 @@ async def stop_script(script_id: str):
         return JSONResponse(content={'error': 'Unknown operation'}, status_code=404)
     try:
         state = await run_in_threadpool(manager.stop, script_id)
-        return JSONResponse(content=dict(state, message='Recording finalized and stopped.'
+        return JSONResponse(content=dict(state, message='Bag finalized; compression is running.'
+                            if state.get('status') == 'compressing' else 'Recording finalized and stopped.'
                             if script_id == 'record_bag' and state.get('finalized') else
-                            'Stop completed.'), status_code=500 if state.get('status') == 'failed' else 200)
+                            'Stop completed.'), status_code=500 if state.get('status') == 'failed' else
+                            202 if state.get('status') == 'compressing' else 200)
     except Exception as exc:
         logger.exception('Unable to stop %s', script_id)
         return JSONResponse(content={'error': str(exc)}, status_code=500)
