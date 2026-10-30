@@ -18,15 +18,14 @@
     depth:
       depth_mode: NONE
     pos_tracking:
-      pos_tracking_enabled: true
+      pos_tracking_enabled: false
       pos_tracking_mode: GEN_3
       compute_preference: PREFER_GPU
       imu_fusion: true
       area_memory: true
-      # Keep odom continuous; map carries loop corrections.
-      reset_odom_with_loop_closure: false
+      reset_odom_with_loop_closure: true
       set_as_static: false
-      set_gravity_as_origin: true
+      set_gravity_as_origin: false
       floor_alignment: false
       two_d_mode: false
       path_pub_rate: 2.0
@@ -35,7 +34,7 @@
       # Keep full-rate IMU samples independent of image publication/subscribers.
       sensors_image_sync: false
       sensors_pub_rate: 200.0
-      publish_imu: true # SDK calibrated IMU measurements and orientation
+      publish_imu: false # SDK calibrated IMU measurements and orientation
       publish_imu_raw: true # uncalibrated accel/gyro; no orientation estimate
     mapping:
       mapping_enabled: false

@@ -3,11 +3,7 @@
 topics:
 - /rslidar_points
 - /witmotion_imu/imu
-- /zed2i/zed_node/imu/data
 - /zed2i/zed_node/imu/data_raw
-- /zed2i/zed_node/odom
-- /zed2i/zed_node/pose
-- /zed2i/zed_node/pose/status
 - /zed2i/zed_node/stereo/color/raw/image
 - /zed2i/zed_node/left/color/raw/camera_info
 - /zed2i/zed_node/right/color/raw/camera_info
